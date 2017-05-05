@@ -1,40 +1,78 @@
 #include <serLCD.h>
 #include <radio.h>
 
+const unsigned int FLOAT_SIZE = sizeof(float);
+
 serLCD * lcd;
+const float THROTTLE_MIN = 121.0;
+const float THROTTLE_MAX = 816.0;
+const float THROTTLE_COEFFICIENT = 1024.0/(THROTTLE_MAX - THROTTLE_MIN);
+const float THROTTLE_CONSTANT = 1024.0 - THROTTLE_MAX*THROTTLE_COEFFICIENT;
+
+const float YAW_MIN = 816.0;
+const float YAW_MID = 494.0;
+const float YAW_MAX = 124.0;
+const float YAW_COEFFICIENT = 612.0/(YAW_MID - YAW_MIN);
+const float YAW_CONSTANT = 612.0 - YAW_MID*YAW_COEFFICIENT;
+//yaw goes from 0 -> 1315
 
 
-void setup() {
-  // put your setup code here, to run once:
+const float ROLL_MIN = 138.0;
+const float ROLL_MID = 503.0;
+const float ROLL_MAX = 816.0;
+const float ROLL_COEFFICIENT = 612.0/(ROLL_MID - ROLL_MIN);
+const float ROLL_CONSTANT = 612.0 - ROLL_MID*ROLL_COEFFICIENT;
+//roll from 0 -> 1136
+
+const float PITCH_MIN = 816.0;
+const float PITCH_MID = 514.0;
+const float PITCH_MAX = 130.0;
+const float PITCH_COEFFICIENT = 612.0/(PITCH_MID - PITCH_MIN);
+const float PITCH_CONSTANT = 612.0 - PITCH_MID*PITCH_COEFFICIENT;
+//pitch from 0 -> 1390 (more if pushed really hard)
+
+struct flightControlInfo
+{
+  const float HEADER = 0xDEADBEEF;
+  float pitch = 0.0;
+  float roll = 0.0;
+  float throttle = 0.0;
+  float yaw = 0.0;
+  float footer = 0x0;
+} info;
+  
+const unsigned int INFO_SIZE = sizeof(flightControlInfo);
+
+void setup()
+{
   Serial.begin(9600);
   rfBegin(12);
   lcd = new serLCD();
-
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
-  //Serial.println(analogRead(0));
-  //Serial.println(analogRead(1));
-  //Serial.println(analogRead(2));
-  //Serial.println(analogRead(3));
-
-  lcd->clear();
-  unsigned int pitch = analogRead(3)*2-260;
-  unsigned int yaw = analogRead(0)*2 - 220;
-  unsigned int roll = analogRead(2)*2-240;
-  //lcd->print(analogRead(0)*2 - 220); //yaw
-  unsigned int throttle = analogRead(1)*2 - 214; //throttle
-  //lcd->print(analogRead(2)*2-240); //roll
-  //lcd->print(pitch); //pitch
-  rfWrite(char(throttle/12));
-  /*lcd->print("|");
-  lcd->print(analogRead(2));
-  lcd->print("|");
-  lcd->print(analogRead(3));
-  lcd->print("|");*/
-
-
+uint8_t calculateChecksum(uint8_t * infoPointer)
+{
+  uint8_t checksum = 0;
   
+  for (int i = 0; i < INFO_SIZE - FLOAT_SIZE; i++)
+  {
+    checksum ^= *(infoPointer++);
+  }
 
+  return checksum;
+}
+
+void loop()
+{
+  //lcd->clear();
+  info.pitch = analogRead(3)*PITCH_COEFFICIENT + PITCH_CONSTANT;
+  info.roll = analogRead(2)*ROLL_COEFFICIENT + ROLL_CONSTANT;
+  info.throttle = analogRead(1)*THROTTLE_COEFFICIENT + THROTTLE_CONSTANT;
+  info.yaw = analogRead(0)*YAW_COEFFICIENT + YAW_CONSTANT;
+  //lcd->print(info.throttle);
+  uint8_t * infoPointer = (uint8_t*)&info;
+  rfWrite(infoPointer, INFO_SIZE);
+  info.footer = calculateChecksum(infoPointer);
+  
+  delay(1); //TODO: Delay time needs to be adjusted
 }
