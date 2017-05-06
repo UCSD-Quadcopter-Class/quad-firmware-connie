@@ -43,6 +43,8 @@ struct flightControlInfo
   
 const unsigned int INFO_SIZE = sizeof(flightControlInfo);
 
+
+
 void setup()
 {
   Serial.begin(9600);
@@ -74,5 +76,5 @@ void loop()
   rfWrite(infoPointer, INFO_SIZE);
   info.footer = calculateChecksum(infoPointer);
   
-  delay(1); //TODO: Delay time needs to be adjusted
+  delay(25); //TODO: Delay time needs to be adjusted
 }
