@@ -13,6 +13,8 @@
 #define LSM9DS1_XGCS 6
 #define LSM9DS1_MCS 5
 
+float pitchMax = 45; //approx
+float pitchMin = -45; //approx
 const int INT_SIZE = sizeof(int);
 const int FLOAT_SIZE = sizeof(float);
 
@@ -23,10 +25,10 @@ const int INFO_BUFFER_SIZE = HEADER_SIZE + 4*FLOAT_SIZE + FOOTER_SIZE; //4 float
 uint8_t infoBuffer [INFO_BUFFER_SIZE]; 
 //uint8_t headerBuffer [HEADER_SIZE];
 
-const int MOTOR_1 = 3;
-const int MOTOR_2 = 4;
-const int MOTOR_3 = 5;
-const int MOTOR_4 = 8;
+const int MOTOR_FR = 3; //green short
+const int MOTOR_BL = 4; //green long
+const int MOTOR_BR = 5; //yellow short
+const int MOTOR_FL = 8; //yellow long
 
 const float HEADER = 0xDEADBEEF;
 
@@ -37,6 +39,27 @@ const float YAW_MAX = 1315;
 const float ROLL_MAX = 1136;
 const float PITCH_MAX = 1390;
 
+const float KP = 0.8;
+const float KI = 5;
+const float KD = 0.01;
+float error = 0;
+float errorSum = 0;
+float lastError =0;
+
+
+unsigned long lastTime = 0;
+
+float throttleFR = 0;
+float throttleBL = 0;
+float throttleFL = 0;
+float throttleBR = 0;
+float pitchPID = 0;
+float rollPID = 0;
+
+float pitchReading = 0;
+float rollReading = 0;
+float gyroReading = 0;
+
 Adafruit_LSM9DS1 lsm = Adafruit_LSM9DS1();
 Adafruit_Simple_AHRS ahrs(&lsm.getAccel(), &lsm.getMag(), &lsm.getGyro());
 
@@ -45,12 +68,13 @@ void setup()
   Serial.begin(115200);
   rfBegin(12);
 
-  pinMode(MOTOR_1, OUTPUT);
-  pinMode(MOTOR_2, OUTPUT);
-  pinMode(MOTOR_3, OUTPUT);
-  pinMode(MOTOR_4, OUTPUT);
+  pinMode(MOTOR_FR, OUTPUT);
+  pinMode(MOTOR_BL, OUTPUT);
+  pinMode(MOTOR_BR, OUTPUT);
+  pinMode(MOTOR_FL, OUTPUT);
 
   setupSensor();
+  lastTime = millis();
 }
 
 void setupSensor()
@@ -81,23 +105,63 @@ uint8_t calculateChecksum(uint8_t * infoPointer)
   return checksum;
 }
 
+float normalizePitch(float pitchValue)
+{
+  return pitchValue / (PITCH_MAX/(pitchMax - pitchMin)) - (pitchMax - pitchMin)/2.0;
+}
+
+void calculate_PID(float pitch, float roll, float throttle, float yaw)
+{
+  unsigned long now = millis();
+  float timeChange = (float)(now - lastTime);
+  
+  error = normalizePitch(pitch) - pitchReading;
+  errorSum += error * timeChange;
+  float dError = (error -  lastError) / timeChange;
+  
+  pitchPID = KP * error + KI * errorSum + KD * dError;
+  
+  lastError = error;
+  lastTime = now;
+
+  //TODO: CHECK BACKWARDS
+  throttleBL = limitThrottle(throttle + pitchPID + rollPID);
+  throttleBR = limitThrottle(throttle + pitchPID - rollPID);
+  throttleFL = limitThrottle(throttle - pitchPID + rollPID);
+  throttleFR = limitThrottle(throttle - pitchPID - rollPID);
+  if (pitchReading < pitchMin) pitchMin = pitchReading; //debugging
+  if (pitchReading > pitchMax) pitchMax = pitchReading; //debugging
+  Serial.print(pitchPID); Serial.print(" "); Serial.print(normalizePitch(pitch)); Serial.print(" "); Serial.println(pitchReading); 
+  Serial.print(pitchMin); Serial.print(" "); Serial.println(pitchMax);
+}
+
+float limitThrottle(float throttleValue)
+{
+  if (throttleValue < 0.0) return 0;
+  else if (throttleValue > 255.0) return 255;
+  else return throttleValue;
+}
+
 void loop()
 {
-    sensors_vec_t   orientation;
+  sensors_vec_t   orientation;
 
   // Use the simple AHRS function to get the current orientation.
   if (ahrs.getOrientation(&orientation))
   {
-    Serial.print(F("Orientation: "));
+    pitchReading = orientation.pitch;
+    rollReading = orientation.roll;
+    gyroReading = orientation.gyro_y;
+    /*Serial.print(F("Orientation: "));
     Serial.print(orientation.roll);
     Serial.print(F(" "));
     Serial.print(orientation.pitch);
     Serial.print(F(" "));
     Serial.print(orientation.gyro_y);
-    Serial.println(F(""));
+    Serial.println(F(""));*/
   }
   
-  delay(100);
+  //delay(100);
 
   
   while (rfAvailable())
@@ -134,10 +198,12 @@ void loop()
         continue;
       }
 
-      analogWrite(MOTOR_1, throttle);
-      analogWrite(MOTOR_2, throttle);
-      analogWrite(MOTOR_3, throttle);
-      analogWrite(MOTOR_4, throttle);
+      calculate_PID(pitch, roll, throttle, yaw);
+
+      analogWrite(MOTOR_FR, throttleFR);
+      analogWrite(MOTOR_BL, throttleBL);
+      analogWrite(MOTOR_BR, throttleBR);
+      analogWrite(MOTOR_FL, throttleFL);
     }
   }
 }
