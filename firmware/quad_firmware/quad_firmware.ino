@@ -37,11 +37,14 @@ const float THROTTLE_COEFFICIENT = 255;
 
 const float YAW_MAX = 1315;
 const float ROLL_MAX = 1136;
-const float PITCH_MAX = 1390;
+const float PITCH_MAX = 1224; //1390 actual max
+const float PITCH_MID = 612;
+const float PITCH_MIN = 0;
+const float PITCH_OFFSET = (pitchMax - pitchMin) / 2.0 - PITCH_MID / ((PITCH_MAX - PITCH_MIN) / (pitchMax - pitchMin));
 
-const float KP = 0.8;
-const float KI = 5;
-const float KD = 0.01;
+const float KP = 3.0;
+const float KI = 0;//0.01;
+const float KD = 0.001;
 float error = 0;
 float errorSum = 0;
 float lastError =0;
@@ -60,6 +63,10 @@ float pitchReading = 0;
 float rollReading = 0;
 float gyroReading = 0;
 
+float pitchOffset = 0;
+float rollOffset = 0;
+float gyroOffset = 0;
+
 Adafruit_LSM9DS1 lsm = Adafruit_LSM9DS1();
 Adafruit_Simple_AHRS ahrs(&lsm.getAccel(), &lsm.getMag(), &lsm.getGyro());
 
@@ -74,6 +81,8 @@ void setup()
   pinMode(MOTOR_FL, OUTPUT);
 
   setupSensor();
+  calibrateSensor();
+  
   lastTime = millis();
 }
 
@@ -93,6 +102,44 @@ void setupSensor()
   lsm.setupGyro(lsm.LSM9DS1_GYROSCALE_245DPS);
 }
 
+void calibrateSensor()
+{
+  sensors_vec_t   orientation;
+  float pitchValue = 0;
+  float rollValue = 0;
+  float gyroValue = 0;
+
+  float pitchSum = 0;
+  float rollSum = 0;
+  float gyroSum = 0;
+
+  for(int i = 0; i < 5; i++)
+  {
+    for(int j = 0; j < 10; j++)
+    {
+      // Use the simple AHRS function to get the current orientation.
+      if (ahrs.getOrientation(&orientation))
+      {
+        pitchSum += orientation.pitch;
+        rollSum += orientation.roll;
+        gyroSum += orientation.gyro_y;
+      }
+    }
+
+    pitchValue += pitchSum / 10.0;
+    rollValue += rollSum / 10.0;
+    gyroValue += gyroSum / 10.0;
+  }
+
+  pitchOffset = pitchValue / 5.0;
+  rollOffset = rollValue / 5.0;
+  gyroOffset = gyroValue / 5.0;
+
+    (pitchOffset);
+  //Serial.println(rollOffset);
+  //Serial.println(gyroOffset);
+}
+
 uint8_t calculateChecksum(uint8_t * infoPointer)
 {
   uint8_t checksum = 0;
@@ -107,7 +154,9 @@ uint8_t calculateChecksum(uint8_t * infoPointer)
 
 float normalizePitch(float pitchValue)
 {
-  return pitchValue / (PITCH_MAX/(pitchMax - pitchMin)) - (pitchMax - pitchMin)/2.0;
+  if (pitchValue < PITCH_MIN) pitchValue = PITCH_MIN;
+  else if (pitchValue > PITCH_MAX) pitchValue = PITCH_MAX;
+  return pitchValue / (PITCH_MAX/(pitchMax - pitchMin)) - (pitchMax - pitchMin)/2.0 + PITCH_OFFSET;
 }
 
 void calculate_PID(float pitch, float roll, float throttle, float yaw)
@@ -129,10 +178,11 @@ void calculate_PID(float pitch, float roll, float throttle, float yaw)
   throttleBR = limitThrottle(throttle + pitchPID - rollPID);
   throttleFL = limitThrottle(throttle - pitchPID + rollPID);
   throttleFR = limitThrottle(throttle - pitchPID - rollPID);
-  if (pitchReading < pitchMin) pitchMin = pitchReading; //debugging
-  if (pitchReading > pitchMax) pitchMax = pitchReading; //debugging
+  //if (pitchReading < pitchMin) pitchMin = pitchReading; //debugging
+  //if (pitchReading > pitchMax) pitchMax = pitchReading; //debugging
   Serial.print(pitchPID); Serial.print(" "); Serial.print(normalizePitch(pitch)); Serial.print(" "); Serial.println(pitchReading); 
-  Serial.print(pitchMin); Serial.print(" "); Serial.println(pitchMax);
+  //Serial.print(pitchPID); Serial.print(" "); Serial.println(error);
+  //Serial.print(pitchMin); Serial.print(" "); Serial.println(pitchMax);
 }
 
 float limitThrottle(float throttleValue)
@@ -152,6 +202,7 @@ void loop()
     pitchReading = orientation.pitch;
     rollReading = orientation.roll;
     gyroReading = orientation.gyro_y;
+    //Serial.println(pitchReading);
     /*Serial.print(F("Orientation: "));
     Serial.print(orientation.roll);
     Serial.print(F(" "));
