@@ -42,15 +42,20 @@ const float PITCH_MID = 612;
 const float PITCH_MIN = 0;
 const float PITCH_OFFSET = (pitchMax - pitchMin) / 2.0 - PITCH_MID / ((PITCH_MAX - PITCH_MIN) / (pitchMax - pitchMin));
 
-const float KP = 3.0;
-const float KI = 0;//0.01;
-const float KD = 0.001;
+const float KP = 1.8;
+const float KI = 0;//0.0001;//0.01;
+const float KD = 0;//0.001;
 float error = 0;
 float errorSum = 0;
 float lastError =0;
 
 
 unsigned long lastTime = 0;
+
+const float OFFSET_FR = -0.5;//18;
+const float OFFSET_BL = -0.5;//18;
+const float OFFSET_BR = 0;//28;
+const float OFFSET_FL = -2.5;//12;
 
 float throttleFR = 0;
 float throttleBL = 0;
@@ -153,7 +158,7 @@ void calibrateSensor()
   rollOffset = rollValue / 5.0;
   gyroOffset = gyroValue / 5.0;
 
-    //(pitchOffset);
+  //Serial.println(pitchOffset);
   //Serial.println(rollOffset);
   //Serial.println(gyroOffset);
 }
@@ -192,15 +197,16 @@ void calculate_PID(float pitch, float roll, float throttle, float yaw)
   lastTime = now;
 
   //TODO: CHECK BACKWARDS
-  throttleBL = limitThrottle(throttle + pitchPID + rollPID);
-  throttleBR = limitThrottle(throttle + pitchPID - rollPID);
-  throttleFL = limitThrottle(throttle - pitchPID + rollPID);
-  throttleFR = limitThrottle(throttle - pitchPID - rollPID);
+  throttleBL = limitThrottle(throttle + pitchPID + rollPID + OFFSET_BL);
+  throttleBR = limitThrottle(throttle + pitchPID - rollPID + OFFSET_BR);
+  throttleFL = limitThrottle(throttle - pitchPID + rollPID + OFFSET_FL);
+  throttleFR = limitThrottle(throttle - pitchPID - rollPID + OFFSET_FR);
   //if (pitchReadingAverage < pitchMin) pitchMin = pitchReadingAverage; //debugging
   //if (pitchReadingAverage > pitchMax) pitchMax = pitchReadingAverage; //debugging
   //Serial.print(pitchPID); Serial.print(" "); Serial.print(normalizePitch(pitch)); Serial.print(" "); Serial.println(pitchReadingAverage); 
   //Serial.print(pitchPID); Serial.print(" "); Serial.println(error);
   //Serial.print(pitchMin); Serial.print(" "); Serial.println(pitchMax);
+  //Serial.println(gyroReadingAverage);
 }
 
 float limitThrottle(float throttleValue)
@@ -248,6 +254,9 @@ void calculateReadingAverages()
     Serial.print(orientation.gyro_y);
     Serial.println(F(""));*/
   }
+  
+  pitchReadingAverage -= pitchOffset;
+  rollReadingAverage -= rollOffset;
 }
 
 void loop()
@@ -290,11 +299,11 @@ void loop()
       }
 
       calculate_PID(pitch, roll, throttle, yaw);
-
-      analogWrite(MOTOR_FR, throttleFR);
-      analogWrite(MOTOR_BL, throttleBL);
-      analogWrite(MOTOR_BR, throttleBR);
-      analogWrite(MOTOR_FL, throttleFL);
+      
+      analogWrite(MOTOR_FR, throttleFR); //red
+      analogWrite(MOTOR_BL, throttleBL); //white
+      analogWrite(MOTOR_BR, throttleBR); //black
+      analogWrite(MOTOR_FL, throttleFL); //green
     }
   }
 }
