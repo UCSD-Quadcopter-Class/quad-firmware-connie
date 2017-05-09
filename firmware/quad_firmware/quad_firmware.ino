@@ -59,9 +59,16 @@ float throttleBR = 0;
 float pitchPID = 0;
 float rollPID = 0;
 
-float pitchReading = 0;
-float rollReading = 0;
-float gyroReading = 0;
+float pitchReadingAverage = 0;
+float rollReadingAverage = 0;
+float gyroReadingAverage = 0;
+
+const int WINDOW_SIZE = 10;
+int windowCounter = 0;
+float pitchReadings [WINDOW_SIZE];
+float rollReadings [WINDOW_SIZE];
+float gyroReadings [WINDOW_SIZE];
+
 
 float pitchOffset = 0;
 float rollOffset = 0;
@@ -80,10 +87,21 @@ void setup()
   pinMode(MOTOR_BR, OUTPUT);
   pinMode(MOTOR_FL, OUTPUT);
 
+  setupWindow();
   setupSensor();
   calibrateSensor();
   
   lastTime = millis();
+}
+
+void setupWindow()
+{
+  for (int i = 0; i < WINDOW_SIZE; i++)
+  {
+    pitchReadings[i] = 0;
+    rollReadings[i] = 0;
+    gyroReadings[i] = 0;
+  }
 }
 
 void setupSensor()
@@ -135,7 +153,7 @@ void calibrateSensor()
   rollOffset = rollValue / 5.0;
   gyroOffset = gyroValue / 5.0;
 
-    (pitchOffset);
+    //(pitchOffset);
   //Serial.println(rollOffset);
   //Serial.println(gyroOffset);
 }
@@ -164,7 +182,7 @@ void calculate_PID(float pitch, float roll, float throttle, float yaw)
   unsigned long now = millis();
   float timeChange = (float)(now - lastTime);
   
-  error = normalizePitch(pitch) - pitchReading;
+  error = normalizePitch(pitch) - pitchReadingAverage;
   errorSum += error * timeChange;
   float dError = (error -  lastError) / timeChange;
   
@@ -178,9 +196,9 @@ void calculate_PID(float pitch, float roll, float throttle, float yaw)
   throttleBR = limitThrottle(throttle + pitchPID - rollPID);
   throttleFL = limitThrottle(throttle - pitchPID + rollPID);
   throttleFR = limitThrottle(throttle - pitchPID - rollPID);
-  //if (pitchReading < pitchMin) pitchMin = pitchReading; //debugging
-  //if (pitchReading > pitchMax) pitchMax = pitchReading; //debugging
-  Serial.print(pitchPID); Serial.print(" "); Serial.print(normalizePitch(pitch)); Serial.print(" "); Serial.println(pitchReading); 
+  //if (pitchReadingAverage < pitchMin) pitchMin = pitchReadingAverage; //debugging
+  //if (pitchReadingAverage > pitchMax) pitchMax = pitchReadingAverage; //debugging
+  //Serial.print(pitchPID); Serial.print(" "); Serial.print(normalizePitch(pitch)); Serial.print(" "); Serial.println(pitchReadingAverage); 
   //Serial.print(pitchPID); Serial.print(" "); Serial.println(error);
   //Serial.print(pitchMin); Serial.print(" "); Serial.println(pitchMax);
 }
@@ -192,17 +210,36 @@ float limitThrottle(float throttleValue)
   else return throttleValue;
 }
 
-void loop()
+void calculateReadingAverages()
 {
   sensors_vec_t   orientation;
 
   // Use the simple AHRS function to get the current orientation.
   if (ahrs.getOrientation(&orientation))
   {
-    pitchReading = orientation.pitch;
-    rollReading = orientation.roll;
-    gyroReading = orientation.gyro_y;
-    //Serial.println(pitchReading);
+    pitchReadings[windowCounter] = orientation.pitch;
+    rollReadings[windowCounter] = orientation.roll;
+    gyroReadings[windowCounter] = orientation.gyro_y;
+    pitchReadingAverage = 0;
+    rollReadingAverage = 0;
+    gyroReadingAverage = 0;
+    
+
+    for(int i = 0; i < WINDOW_SIZE; i++)
+    {
+      pitchReadingAverage += pitchReadings[i];
+      rollReadingAverage += rollReadings[i];
+      gyroReadingAverage += gyroReadings[i];
+    }
+
+    pitchReadingAverage /= float(WINDOW_SIZE);
+    rollReadingAverage /= float(WINDOW_SIZE);
+    gyroReadingAverage /= float(WINDOW_SIZE);
+
+    if (windowCounter == 10) windowCounter = 0;
+    else windowCounter++;  
+    
+    //Serial.println(pitchReadingAverage);
     /*Serial.print(F("Orientation: "));
     Serial.print(orientation.roll);
     Serial.print(F(" "));
@@ -211,10 +248,13 @@ void loop()
     Serial.print(orientation.gyro_y);
     Serial.println(F(""));*/
   }
-  
-  //delay(100);
+}
 
-  
+void loop()
+{
+  calculateReadingAverages();
+  //Serial.println(pitchReadingAverage);
+    
   while (rfAvailable())
   {
     int numBytesAvailable = rfAvailable(); //behaves weirdly if you use rfAvailable return value directly

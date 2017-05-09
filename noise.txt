@@ -1,0 +1,2 @@
+-Use sliding/moving window to get avreage of last 10 IMU readings. This helps smooth the IMU readings a lot. Without this, the readings are all over the place.
+-Use low/hi pass filter for IMU.
