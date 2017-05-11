@@ -1,7 +1,9 @@
 #include <serLCD.h>
 #include <radio.h>
+#include <quad_remote.h>
 
 const unsigned int FLOAT_SIZE = sizeof(float);
+const unsigned int UINT_SIZE = sizeof(unsigned int);
 
 serLCD * lcd;
 const float THROTTLE_MIN = 121.0;
@@ -38,6 +40,10 @@ struct flightControlInfo
   float roll = 0.0;
   float throttle = 0.0;
   float yaw = 0.0;
+  unsigned int pot1 = 0;
+  unsigned int pot2 = 0;
+  unsigned int button1 = 0;
+  unsigned int button2 = 0;
   float footer = 0x0;
 } info;
   
@@ -61,16 +67,26 @@ uint8_t calculateChecksum(uint8_t * infoPointer)
     checksum ^= *(infoPointer++);
   }
 
-  return checksum;
+  return checksum;  
 }
 
 void loop()
 {
-  //lcd->clear();
-  info.pitch = analogRead(3)*PITCH_COEFFICIENT + PITCH_CONSTANT;
-  info.roll = analogRead(2)*ROLL_COEFFICIENT + ROLL_CONSTANT;
-  info.throttle = analogRead(1)*THROTTLE_COEFFICIENT + THROTTLE_CONSTANT;
-  info.yaw = analogRead(0)*YAW_COEFFICIENT + YAW_CONSTANT;
+  /*Serial.println(digitalRead(PIN_BTN2)); 
+  Serial.println(analogRead(PIN_POT2)); //118-816 ////116 - 815
+  lcd->clear();
+  lcd->print(digitalRead(PIN_BTN2));*/
+
+  info.button1 = digitalRead(PIN_BTN1);
+  info.button2 = digitalRead(PIN_BTN2);
+  info.pot1 = analogRead(PIN_POT1);
+  info.pot2 = analogRead(PIN_POT2);
+
+  
+  info.pitch = analogRead(PIN_PITCH)*PITCH_COEFFICIENT + PITCH_CONSTANT;
+  info.roll = analogRead(PIN_ROLL)*ROLL_COEFFICIENT + ROLL_CONSTANT;
+  info.throttle = analogRead(PIN_THROTTLE)*THROTTLE_COEFFICIENT + THROTTLE_CONSTANT;
+  info.yaw = analogRead(PIN_YAW)*YAW_COEFFICIENT + YAW_CONSTANT;
   //lcd->print(info.throttle);
   uint8_t * infoPointer = (uint8_t*)&info;
   rfWrite(infoPointer, INFO_SIZE);
