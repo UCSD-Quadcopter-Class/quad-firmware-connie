@@ -130,13 +130,13 @@ bool Adafruit_LSM9DS1::begin()
     return false;
 
   // enable gyro continuous
-  write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG1_G, 0x40); // on XYZ
-  write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG3_G, 0x40); // on XYZ
+  write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG1_G, 0xC0); // on XYZ
+  write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG3_G, 0x40); // on XYZ 0x45
 
   // Enable the accelerometer continous
   write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG5_XL, 0x38); // enable X Y and Z axis
-  write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG6_XL, 0x80/*0xC0*/); // 1 KHz out data rate, BW set by ODR, 408Hz anti-aliasing
-  write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG7_XL, 0xE0); // low pass?
+  write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG6_XL, 0xC0); // 1 KHz out data rate, BW set by ODR, 408Hz anti-aliasing
+  write8(XGTYPE, LSM9DS1_REGISTER_CTRL_REG7_XL, 0xE0);
 
 
 // 0xA0 / 0xA0 -> pretty good at quarter power

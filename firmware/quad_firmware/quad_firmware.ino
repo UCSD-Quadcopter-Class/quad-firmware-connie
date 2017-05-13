@@ -13,6 +13,10 @@
 #define LSM9DS1_XGCS 6
 #define LSM9DS1_MCS 5
 
+bool reset = true;
+bool motorsOn = true;
+bool pidCalculationStarted = false;
+
 float pitchMax = 45; //approx
 float pitchMin = -45; //approx
 const int INT_SIZE = sizeof(int);
@@ -43,9 +47,9 @@ const float PITCH_MID = 612;
 const float PITCH_MIN = 0;
 const float PITCH_OFFSET = (pitchMax - pitchMin) / 2.0 - PITCH_MID / ((PITCH_MAX - PITCH_MIN) / (pitchMax - pitchMin));
 
-const float KP = 1.5;
+const float KP = 1.8;
 const float KI = 0;//0.0001;//0.0001;//0.01;
-const float KD = 0;//0.0000001;//0.001;//0.001;
+const float KD = 0.001;//0.0000001;//0.001;//0.001;
 float error = 0;
 float errorSum = 0;
 float lastError =0;
@@ -65,12 +69,13 @@ float throttleBR = 0;
 float pitchPID = 0;
 float rollPID = 0;
 
+float filteredPitch = 0;
 float pitchReadingAverage = 0;
-float lastPitchReading = 0;
+//float lastPitchReading = 0;
 float rollReadingAverage = 0;
 float gyroReadingAverage = 0;
 
-const int WINDOW_SIZE = 5;
+const int WINDOW_SIZE = 1;
 int windowCounter = 0;
 float pitchReadings [WINDOW_SIZE];
 float rollReadings [WINDOW_SIZE];
@@ -83,16 +88,26 @@ float gyroOffset = 0;
 
 float pot1Value = 0;
 float pot2Value=0;
-unsigned int button1Value = 1;
-unsigned int button2Value = 1;
+unsigned int button1Value = 1; //reset
+unsigned int button2Value = 1; //on/off
 
 const float POT1_MIN = 115;
 const float POT1_MAX = 816;
+const float POT1_LIMIT_MIN = 0.0;
+const float POT1_LIMIT_MAX = 4.0;
+const float POT1_COEFFICIENT = (POT1_LIMIT_MAX - POT1_LIMIT_MIN)/(POT1_MAX - POT1_MIN);
+const float POT1_CONSTANT = POT1_LIMIT_MAX - POT1_MAX * POT1_COEFFICIENT;
 
-const float POT1_COEFFICIENT = 1.0/(POT1_MAX - POT1_MIN);
-const float POT1_CONSTANT = 1.0 - POT1_MAX * POT1_COEFFICIENT;
+
+const float POT2_MIN = 0;
+const float POT2_MAX = 1003;
+const float POT2_LIMIT_MIN = 0.0;
+const float POT2_LIMIT_MAX = 1.0;
+const float POT2_COEFFICIENT = (POT2_LIMIT_MAX - POT2_LIMIT_MIN)/(POT2_MAX - POT2_MIN);
+const float POT2_CONSTANT = POT2_LIMIT_MAX - POT2_MAX * POT2_COEFFICIENT;
 
 float compCoefficient = 0;
+const float COMP_COEFFICIENT = 0.8;
 
 
 Adafruit_LSM9DS1 lsm = Adafruit_LSM9DS1();
@@ -198,21 +213,31 @@ float normalizePitch(float pitchValue)
   return pitchValue / (PITCH_MAX/(pitchMax - pitchMin)) - (pitchMax - pitchMin)/2.0 + PITCH_OFFSET;
 }
 
-void calculate_PID(float pitch, float roll, float throttle, float yaw)
+void calculatePID(float pitch, float roll, float throttle, float yaw)
 {
   if (lastError < -200 || lastError > 200) lastError=0;
   unsigned long now = millis();
   float timeChange = (float)(now - lastTime);
-  compCoefficient = pot1Value;
-  pitchReadingAverage = compCoefficient * (lastPitchReading + gyroReadingAverage * timeChange/1000.0) + (1.0 - compCoefficient) * pitchReadingAverage; //TODO: Complementary Filter
-  lastPitchReading = pitchReadingAverage;
+  //compCoefficient = pot1Value; Serial.println(compCoefficient);
+
+  if (pidCalculationStarted)
+  {
+    filteredPitch = COMP_COEFFICIENT * (filteredPitch + gyroReadingAverage * timeChange/1000.0) + (1.0 - COMP_COEFFICIENT) * pitchReadingAverage;
+  }
+  else
+  {
+    filteredPitch = pitchReadingAverage;
+    pidCalculationStarted = true;
+  }
+
+  //Serial.print(pitchReadingAverage); Serial.print(" "); Serial.println(filteredPitch); //Serial.print(" "); Serial.println(gyroReadingAverage);
   //Serial.println(pitchReadingAverage); Serial.print(" ");
   //Serial.println(pot1Value);
-  error = normalizePitch(pitch) - pitchReadingAverage;
+  error = normalizePitch(pitch) - filteredPitch;
   errorSum += error * timeChange;
   float dError = (error -  lastError) / timeChange;
   
-  pitchPID = KP * error + KI * errorSum + KD * dError;
+  pitchPID = pot1Value * error + KI * errorSum + pot2Value * dError;
   //if (pitchPID < -255 || pitchPID >255) Serial.println(pitchPID);  
   //if(lastError < -1000 || lastError > 1000) Serial.println(lastError);
   //if(dError < -100 || dError > 100.0) Serial.print(dError); Serial.print(" "); Serial.print(error); Serial.print(" "); Serial.print(lastError); Serial.print(" "); Serial.println(timeChange);
@@ -242,8 +267,25 @@ float limitThrottle(float throttleValue)
 void calculateReadingAverages()
 {
   sensors_vec_t   orientation;
+  
+  if(reset)
+  {
+    windowCounter = 0;
+    
+    for (int i = 0; i < WINDOW_SIZE; i++)
+    {
+      if (ahrs.getOrientation(&orientation))
+      {
+        pitchReadings[windowCounter] = orientation.pitch;
+        rollReadings[windowCounter] = orientation.roll;
+        gyroReadings[windowCounter] = orientation.gyro_y;  
+        if (windowCounter == 10) windowCounter = 0;
+        else windowCounter++;  
+      }
+    }
+  }
+  
 
-  // Use the simple AHRS function to get the current orientation.
   if (ahrs.getOrientation(&orientation))
   {
     pitchReadings[windowCounter] = orientation.pitch;
@@ -265,7 +307,7 @@ void calculateReadingAverages()
     rollReadingAverage /= float(WINDOW_SIZE);
     gyroReadingAverage /= float(WINDOW_SIZE);
 
-    if (windowCounter == 10) windowCounter = 0;
+    if (windowCounter == WINDOW_SIZE) windowCounter = 0;
     else windowCounter++;  
     
     //Serial.println(pitchReadingAverage);
@@ -277,17 +319,24 @@ void calculateReadingAverages()
     Serial.print(orientation.gyro_y);
     Serial.println(F(""));*/
   }
+
   
   pitchReadingAverage -= pitchOffset;
   rollReadingAverage -= rollOffset;
 }
 
 void loop()
-{
+{  
   calculateReadingAverages();
+  if (reset)
+  {
+    pidCalculationStarted = false;
+    reset = false;  
+  }
+
   //Serial.println(pitchReadingAverage);
     
-  while (rfAvailable())
+  if (rfAvailable())
   {
     int numBytesAvailable = rfAvailable(); //behaves weirdly if you use rfAvailable return value directly
     
@@ -300,7 +349,7 @@ void loop()
       if(HEADER != header)
       {
         //Serial.println("Bad Header!");
-        continue;
+        return;
       } //else Serial.println("Good");
       
       float pitch = *(infoPointer++);
@@ -313,13 +362,23 @@ void loop()
       float yaw = *(infoPointer++);
       unsigned int * infoUIntPointer = (unsigned int *)infoPointer;
       pot1Value = float(*(infoUIntPointer++)) * POT1_COEFFICIENT + POT1_CONSTANT;
-      if (pot1Value < 0.0) pot1Value = 0.0;
-      else if(pot1Value > 1.0) pot1Value = 1.0;
+      if (pot1Value < POT1_LIMIT_MIN) pot1Value = POT1_LIMIT_MIN;
+      else if(pot1Value > POT1_LIMIT_MAX) pot1Value = POT1_LIMIT_MAX;
+     
       
       
-      unsigned int pot2 = *(infoUIntPointer++);
+      pot2Value = float(*(infoUIntPointer++)) * POT2_COEFFICIENT + POT2_CONSTANT;
+      if (pot2Value < POT2_LIMIT_MIN) pot2Value = POT2_LIMIT_MIN;
+      else if(pot2Value > POT2_LIMIT_MAX) pot2Value = POT2_LIMIT_MAX;
+      //Serial.print(pot1Value); Serial.print(" "); Serial.println(pot2Value);
       unsigned int button1 = *(infoUIntPointer++);
       unsigned int button2 = *(infoUIntPointer++);
+      if(button1 == 0) reset = true;
+      if(button2 == 0)
+      {
+        motorsOn = !motorsOn;
+      }
+      
 
       infoPointer = (float *) infoUIntPointer;
       float footer = *(infoPointer);
@@ -329,17 +388,27 @@ void loop()
       if(checksum != (uint8_t) footer)
       {
         //Serial.println("Bad packet!");
-        continue;
+        return;
       } //else Serial.println("Good");
 
       
       //Serial.println(pot1Value);
-      calculate_PID(pitch, roll, throttle, yaw);
-      
-      analogWrite(MOTOR_FR, throttleFR); //red
-      analogWrite(MOTOR_BL, throttleBL); //white
-      analogWrite(MOTOR_BR, throttleBR); //black
-      analogWrite(MOTOR_FL, throttleFL); //green
+      calculatePID(pitch, roll, throttle, yaw);
+
+      if (motorsOn)
+      {
+        analogWrite(MOTOR_FR, throttleFR); //red
+        analogWrite(MOTOR_BL, throttleBL); //white
+        analogWrite(MOTOR_BR, throttleBR); //black
+        analogWrite(MOTOR_FL, throttleFL); //green
+      }
+      else
+      {
+        analogWrite(MOTOR_FR, 0); //red
+        analogWrite(MOTOR_BL, 0); //white
+        analogWrite(MOTOR_BR, 0); //black
+        analogWrite(MOTOR_FL, 0); //green
+      }
     }
   }
 }

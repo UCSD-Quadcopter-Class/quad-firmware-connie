@@ -42,8 +42,8 @@ struct flightControlInfo
   float yaw = 0.0;
   unsigned int pot1 = 0;
   unsigned int pot2 = 0;
-  unsigned int button1 = 0;
-  unsigned int button2 = 0;
+  unsigned int button1 = 1;
+  unsigned int button2 = 1;
   float footer = 0x0;
 } info;
   
@@ -56,6 +56,8 @@ void setup()
   Serial.begin(9600);
   rfBegin(12);
   lcd = new serLCD();
+  pinMode(PIN_BTN1, INPUT_PULLUP);
+  pinMode(PIN_BTN2, INPUT_PULLUP);
 }
 
 uint8_t calculateChecksum(uint8_t * infoPointer)
@@ -93,4 +95,5 @@ void loop()
   info.footer = calculateChecksum(infoPointer);
   
   delay(25); //TODO: Delay time needs to be adjusted
+  if (info.button1 == 0 || info.button2 == 0) delay(1000);
 }
