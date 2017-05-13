@@ -21,12 +21,9 @@ bool pidCalculationStarted = false;
 float pitchMax = 45; //approx
 float pitchMin = -45; //approx
 
-const int HEADER_SIZE = FLOAT_SIZE;
-const int FOOTER_SIZE = FLOAT_SIZE;
 
-const int INFO_BUFFER_SIZE = HEADER_SIZE + 4*FLOAT_SIZE + 4*UINT_SIZE + FOOTER_SIZE; //4 floats, header, and the footer 
-uint8_t infoBuffer [INFO_BUFFER_SIZE]; 
-//uint8_t headerBuffer [HEADER_SIZE];
+unsigned char infoBuffer [INFO_SIZE]; 
+//unsigned char headerBuffer [HEADER_SIZE];
 
 const int MOTOR_FR = 3; //green short
 const int MOTOR_BL = 4; //green long
@@ -325,58 +322,50 @@ void loop()
   {
     int numBytesAvailable = rfAvailable(); //behaves weirdly if you use rfAvailable return value directly
     
-    if (numBytesAvailable >= INFO_BUFFER_SIZE)
+    if (numBytesAvailable >= INFO_SIZE)
     {
-      rfRead(infoBuffer, INFO_BUFFER_SIZE);
-      float * infoPointer = (float*) infoBuffer;
-      float header = *(infoPointer++);
-      
-      if(HEADER != header)
+      rfRead(infoBuffer, INFO_SIZE);
+      flightControlInfo info = *((flightControlInfo *) infoBuffer);
+     
+      if(info.header != HEADER)
       {
-        //Serial.println("Bad Header!");
+        Serial.println("Bad Header!");
+        return;
+      } //else Serial.println("Good");
+
+      if(calculateChecksum(infoBuffer) != info.footer)
+      {
+        Serial.println("Bad checksum!");
         return;
       } //else Serial.println("Good");
       
-      float pitch = *(infoPointer++);
-      float roll = *(infoPointer++);
-      float throttle = (*(infoPointer++));
+      float pitch = info.pitch;
+      float roll = info.roll;
+      float throttle = info.throttle;
       if(throttle > 1024.0 || throttle < 0) throttle = 0.0;
 
       throttle = throttle/THROTTLE_MAX * THROTTLE_COEFFICIENT;
       
-      float yaw = *(infoPointer++);
-      unsigned int * infoUIntPointer = (unsigned int *)infoPointer;
-      pot1Value = float(*(infoUIntPointer++)) * POT1_COEFFICIENT + POT1_CONSTANT;
+      float yaw = info.yaw;
+      pot1Value = float(info.pot1) * POT1_COEFFICIENT + POT1_CONSTANT;
       if (pot1Value < POT1_LIMIT_MIN) pot1Value = POT1_LIMIT_MIN;
       else if(pot1Value > POT1_LIMIT_MAX) pot1Value = POT1_LIMIT_MAX;
      
       
       
-      pot2Value = float(*(infoUIntPointer++)) * POT2_COEFFICIENT + POT2_CONSTANT;
+      pot2Value = float(info.pot2) * POT2_COEFFICIENT + POT2_CONSTANT;
       if (pot2Value < POT2_LIMIT_MIN) pot2Value = POT2_LIMIT_MIN;
       else if(pot2Value > POT2_LIMIT_MAX) pot2Value = POT2_LIMIT_MAX;
       //Serial.print(pot1Value); Serial.print(" "); Serial.println(pot2Value);
-      unsigned int button1 = *(infoUIntPointer++);
-      unsigned int button2 = *(infoUIntPointer++);
-      if(button1 == 0) reset = true;
-      if(button2 == 0)
+
+
+      if(info.button1 == 0) reset = true;
+      if(info.button2 == 0)
       {
         motorsOn = !motorsOn;
       }
       
-
-      infoPointer = (float *) infoUIntPointer;
-      float footer = *(infoPointer);
-
-      uint8_t checksum = calculateChecksum(infoBuffer);
-
-      if(checksum != (uint8_t) footer)
-      {
-        //Serial.println("Bad packet!");
-        return;
-      } //else Serial.println("Good");
-
-      
+            
       //Serial.println(pot1Value);
       calculatePID(pitch, roll, throttle, yaw);
 

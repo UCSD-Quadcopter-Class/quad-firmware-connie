@@ -5,6 +5,8 @@
 
 const unsigned int FLOAT_SIZE = sizeof(float);
 const unsigned int UINT_SIZE = sizeof(unsigned int);
+const unsigned int UCHAR_SIZE = sizeof(unsigned char);
+const unsigned int FOOTER_SIZE = UCHAR_SIZE;
 
 const float HEADER = 0xDEADBEEF;
 
@@ -19,16 +21,16 @@ typedef struct flightControlInfo
 	unsigned int pot2;
 	unsigned int button1;
 	unsigned int button2;
-	float footer;
+	unsigned char footer;
 };
 
 const unsigned int INFO_SIZE = sizeof(flightControlInfo);
 
-uint8_t calculateChecksum(uint8_t * infoPointer)
+unsigned char calculateChecksum(unsigned char * infoPointer)
 {
-	uint8_t checksum = 0;
+	unsigned char checksum = 0;
 
-	for (int i = 0; i < INFO_SIZE - FLOAT_SIZE; i++)
+	for (int i = 0; i < INFO_SIZE - FOOTER_SIZE; i++)
 	{
 		checksum ^= *(infoPointer++);
 	}

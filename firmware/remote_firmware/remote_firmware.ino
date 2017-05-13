@@ -3,7 +3,8 @@
 #include <quad_remote.h>
 #include <flight_control.h>
 
-
+const unsigned int DELAY_TIME = 30;
+const unsigned int BUTTON_DELAY_TIME = 1000;
 
 serLCD * lcd;
 const float THROTTLE_MIN = 121.0;
@@ -68,22 +69,21 @@ void loop()
   Serial.println(analogRead(PIN_POT2)); //118-816 ////116 - 815
   lcd->clear();
   lcd->print(digitalRead(PIN_BTN2));*/
-
+  unsigned char * infoPointer = (unsigned char*)&info;
   info.button1 = digitalRead(PIN_BTN1);
   info.button2 = digitalRead(PIN_BTN2);
   info.pot1 = analogRead(PIN_POT1);
   info.pot2 = analogRead(PIN_POT2);
-
-  
   info.pitch = analogRead(PIN_PITCH)*PITCH_COEFFICIENT + PITCH_CONSTANT;
   info.roll = analogRead(PIN_ROLL)*ROLL_COEFFICIENT + ROLL_CONSTANT;
   info.throttle = analogRead(PIN_THROTTLE)*THROTTLE_COEFFICIENT + THROTTLE_CONSTANT;
   info.yaw = analogRead(PIN_YAW)*YAW_COEFFICIENT + YAW_CONSTANT;
-  //lcd->print(info.throttle);
-  uint8_t * infoPointer = (uint8_t*)&info;
-  rfWrite(infoPointer, INFO_SIZE);
   info.footer = calculateChecksum(infoPointer);
   
-  delay(25); //TODO: Delay time needs to be adjusted
-  if (info.button1 == 0 || info.button2 == 0) delay(1000);
+  rfWrite(infoPointer, INFO_SIZE);
+  //lcd->print(info.throttle);
+ 
+  
+  delay(DELAY_TIME); //TODO: Delay time needs to be adjusted
+  if (info.button1 == 0 || info.button2 == 0) delay(BUTTON_DELAY_TIME);
 }
