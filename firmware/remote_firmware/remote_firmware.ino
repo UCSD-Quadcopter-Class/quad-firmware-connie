@@ -1,9 +1,9 @@
 #include <serLCD.h>
 #include <radio.h>
 #include <quad_remote.h>
+#include <flight_control.h>
 
-const unsigned int FLOAT_SIZE = sizeof(float);
-const unsigned int UINT_SIZE = sizeof(unsigned int);
+
 
 serLCD * lcd;
 const float THROTTLE_MIN = 121.0;
@@ -33,21 +33,7 @@ const float PITCH_COEFFICIENT = 612.0/(PITCH_MID - PITCH_MIN);
 const float PITCH_CONSTANT = 612.0 - PITCH_MID*PITCH_COEFFICIENT;
 //pitch from 0 -> 1390 (more if pushed really hard)
 
-struct flightControlInfo
-{
-  const float HEADER = 0xDEADBEEF;
-  float pitch = 0.0;
-  float roll = 0.0;
-  float throttle = 0.0;
-  float yaw = 0.0;
-  unsigned int pot1 = 0;
-  unsigned int pot2 = 0;
-  unsigned int button1 = 1;
-  unsigned int button2 = 1;
-  float footer = 0x0;
-} info;
-  
-const unsigned int INFO_SIZE = sizeof(flightControlInfo);
+flightControlInfo info;
 
 
 
@@ -58,19 +44,23 @@ void setup()
   lcd = new serLCD();
   pinMode(PIN_BTN1, INPUT_PULLUP);
   pinMode(PIN_BTN2, INPUT_PULLUP);
+  initializeInfo();
 }
 
-uint8_t calculateChecksum(uint8_t * infoPointer)
+void initializeInfo()
 {
-  uint8_t checksum = 0;
-  
-  for (int i = 0; i < INFO_SIZE - FLOAT_SIZE; i++)
-  {
-    checksum ^= *(infoPointer++);
-  }
-
-  return checksum;  
+  info.header = HEADER;
+  info.pitch = 0.0;
+  info.roll = 0.0;
+  info.throttle = 0.0;
+  info.yaw = 0.0;
+  info.pot1 = 0;
+  info.pot2 = 0;
+  info.button1 = 1;
+  info.button2 = 1;
+  info.footer = 0;
 }
+
 
 void loop()
 {

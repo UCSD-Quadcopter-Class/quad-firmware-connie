@@ -6,6 +6,7 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_Simple_AHRS.h>
 #include <Adafruit_Sensor_Set.h>
+#include <flight_control.h>
 
 #define LSM9DS1_SCK A5
 #define LSM9DS1_MISO 12
@@ -19,9 +20,6 @@ bool pidCalculationStarted = false;
 
 float pitchMax = 45; //approx
 float pitchMin = -45; //approx
-const int INT_SIZE = sizeof(int);
-const int FLOAT_SIZE = sizeof(float);
-const int UINT_SIZE = sizeof(unsigned int);
 
 const int HEADER_SIZE = FLOAT_SIZE;
 const int FOOTER_SIZE = FLOAT_SIZE;
@@ -35,7 +33,6 @@ const int MOTOR_BL = 4; //green long
 const int MOTOR_BR = 5; //yellow short
 const int MOTOR_FL = 8; //yellow long
 
-const float HEADER = 0xDEADBEEF;
 
 const float THROTTLE_MAX = 1024;
 const float THROTTLE_COEFFICIENT = 255;
@@ -192,18 +189,6 @@ void calibrateSensor()
   //Serial.println(pitchOffset);
   //Serial.println(rollOffset);
   //Serial.println(gyroOffset);
-}
-
-uint8_t calculateChecksum(uint8_t * infoPointer)
-{
-  uint8_t checksum = 0;
-  
-  for (int i = 0; i < INFO_BUFFER_SIZE - FLOAT_SIZE; i++)
-  {
-    checksum ^= *(infoPointer++);
-  }
-
-  return checksum;
 }
 
 float normalizePitch(float pitchValue)
