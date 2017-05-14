@@ -1,7 +1,4 @@
 #include <radio.h>
-
-#include <Wire.h>
-#include <SPI.h>
 #include <Adafruit_LSM9DS1.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_Simple_AHRS.h>
@@ -23,7 +20,6 @@ float pitchMin = -45; //approx
 
 
 unsigned char infoBuffer [INFO_SIZE]; 
-//unsigned char headerBuffer [HEADER_SIZE];
 
 const int MOTOR_FR = 3; //green short
 const int MOTOR_BL = 4; //green long
@@ -197,7 +193,6 @@ float normalizePitch(float pitchValue)
 void calculatePID(float pitch, float roll, float throttle, float yaw)
 {
   if (lastError < -200 || lastError > 200) lastError=0;
-  //unsigned long now = millis();
   float timeChange = (float)abs((millis() - lastTime));
   compCoefficient = COMP_COEFFICIENT;//pot1Value; //Serial.println(compCoefficient);
 //Serial.println(compCoefficient);
@@ -247,9 +242,6 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
 float limitThrottle(float throttleValue)
 {
   return constrain((int)throttleValue, 0, 255);
-  /*if (throttleValue < 0.0) return 0;
-  else if (throttleValue > 255.0) return 255;
-  else return throttleValue;*/
 }
 
 void calculateReadingAverages()
@@ -297,15 +289,6 @@ void calculateReadingAverages()
 
     if (windowCounter == WINDOW_SIZE) windowCounter = 0;
     else windowCounter++;  
-    
-    //Serial.println(pitchReadingAverage);
-    /*Serial.print(F("Orientation: "));
-    Serial.print(orientation.roll);
-    Serial.print(F(" "));
-    Serial.print(orientation.pitch);
-    Serial.print(F(" "));
-    Serial.print(orientation.gyro_y);
-    Serial.println(F(""));*/
   }
 
   
@@ -315,8 +298,8 @@ void calculateReadingAverages()
 
 void loop()
 {  
-  //Serial.println(pot1Value);
   calculateReadingAverages();
+  
   if (reset)
   {
     errorSum = 0;
@@ -325,8 +308,7 @@ void loop()
     reset = false;  
   }
 
-  //Serial.println(pitchReadingAverage);
-    
+
   if (rfAvailable())
   {
     int numBytesAvailable = rfAvailable(); //behaves weirdly if you use rfAvailable return value directly
@@ -359,8 +341,6 @@ void loop()
       if (pot1Value < POT1_LIMIT_MIN) pot1Value = POT1_LIMIT_MIN;
       else if(pot1Value > POT1_LIMIT_MAX) pot1Value = POT1_LIMIT_MAX;
      
-      
-      
       pot2Value = float(info.pot2) * POT2_COEFFICIENT + POT2_CONSTANT;
       if (pot2Value < POT2_LIMIT_MIN) pot2Value = POT2_LIMIT_MIN;
       else if(pot2Value > POT2_LIMIT_MAX) pot2Value = POT2_LIMIT_MAX;
