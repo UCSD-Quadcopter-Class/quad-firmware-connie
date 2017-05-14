@@ -69,6 +69,9 @@ bool Adafruit_Simple_AHRS::getOrientation(sensors_vec_t* orientation) {
   orientation->roll = orientation->roll * 180 / PI_F;
   orientation->pitch = orientation->pitch * 180 / PI_F;
   orientation->heading = orientation->heading * 180 / PI_F;
+  orientation->acc_x = accel_event.acceleration.x;
+  orientation->acc_y = accel_event.acceleration.y;
+  orientation->acc_z = accel_event.acceleration.z;
   orientation->gyro_x = gyro_event.gyro.x;
   orientation->gyro_y = gyro_event.gyro.y;
   orientation->gyro_z = gyro_event.gyro.z;

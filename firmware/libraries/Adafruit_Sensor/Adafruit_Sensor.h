@@ -1,3 +1,5 @@
+
+
 /*
 * Copyright (C) 2008 The Android Open Source Project
 *
@@ -78,6 +80,9 @@ typedef struct {
 			float gyro_x;
 			float gyro_y;
 			float gyro_z;
+			float acc_x;
+			float acc_y;
+			float acc_z;
 		};
     };
     int8_t status;

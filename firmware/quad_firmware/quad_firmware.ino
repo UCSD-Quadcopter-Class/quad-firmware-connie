@@ -69,7 +69,7 @@ float pitchReadingAverage = 0;
 float rollReadingAverage = 0;
 float gyroReadingAverage = 0;
 
-const int WINDOW_SIZE = 1;
+const int WINDOW_SIZE = 2;
 int windowCounter = 0;
 float pitchReadings [WINDOW_SIZE];
 float rollReadings [WINDOW_SIZE];
@@ -88,7 +88,7 @@ unsigned int button2Value = 1; //on/off
 const float POT1_MIN = 115;
 const float POT1_MAX = 816;
 const float POT1_LIMIT_MIN = 0.0;
-const float POT1_LIMIT_MAX = 4.0;
+const float POT1_LIMIT_MAX = 1.0;
 const float POT1_COEFFICIENT = (POT1_LIMIT_MAX - POT1_LIMIT_MIN)/(POT1_MAX - POT1_MIN);
 const float POT1_CONSTANT = POT1_LIMIT_MAX - POT1_MAX * POT1_COEFFICIENT;
 
@@ -101,7 +101,7 @@ const float POT2_COEFFICIENT = (POT2_LIMIT_MAX - POT2_LIMIT_MIN)/(POT2_MAX - POT
 const float POT2_CONSTANT = POT2_LIMIT_MAX - POT2_MAX * POT2_COEFFICIENT;
 
 float compCoefficient = 0;
-const float COMP_COEFFICIENT = 0.8;
+const float COMP_COEFFICIENT = 0.97;
 
 
 Adafruit_LSM9DS1 lsm = Adafruit_LSM9DS1();
@@ -198,13 +198,13 @@ float normalizePitch(float pitchValue)
 void calculatePID(float pitch, float roll, float throttle, float yaw)
 {
   if (lastError < -200 || lastError > 200) lastError=0;
-  unsigned long now = millis();
-  float timeChange = (float)(now - lastTime);
-  //compCoefficient = pot1Value; Serial.println(compCoefficient);
-
+  //unsigned long now = millis();
+  float timeChange = (float)abs((millis() - lastTime));
+  compCoefficient = COMP_COEFFICIENT;//pot1Value; //Serial.println(compCoefficient);
+//Serial.println(compCoefficient);
   if (pidCalculationStarted)
   {
-    filteredPitch = COMP_COEFFICIENT * (filteredPitch + gyroReadingAverage * timeChange/1000.0) + (1.0 - COMP_COEFFICIENT) * pitchReadingAverage;
+    filteredPitch = compCoefficient * (filteredPitch - gyroReadingAverage * timeChange/1000.0) + (1.0 - compCoefficient) * pitchReadingAverage; //TODO: check comp filter logic/equation, gyroReading?
   }
   else
   {
@@ -212,7 +212,7 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
     pidCalculationStarted = true;
   }
 
-  //Serial.print(pitchReadingAverage); Serial.print(" "); Serial.println(filteredPitch); //Serial.print(" "); Serial.println(gyroReadingAverage);
+  
   //Serial.println(pitchReadingAverage); Serial.print(" ");
   //Serial.println(pot1Value);
   error = normalizePitch(pitch) - filteredPitch;
@@ -220,11 +220,12 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
   float dError = (error -  lastError) / timeChange;
   
   pitchPID = pot1Value * error + KI * errorSum + pot2Value * dError;
+  //Serial.print(pitchReadingAverage); Serial.print(" "); Serial.println(filteredPitch); //Serial.print(" "); Serial.println(pitchPID);
   //if (pitchPID < -255 || pitchPID >255) Serial.println(pitchPID);  
   //if(lastError < -1000 || lastError > 1000) Serial.println(lastError);
   //if(dError < -100 || dError > 100.0) Serial.print(dError); Serial.print(" "); Serial.print(error); Serial.print(" "); Serial.print(lastError); Serial.print(" "); Serial.println(timeChange);
   lastError = error;
-  lastTime = now;
+  lastTime = millis();
 
   //TODO: CHECK BACKWARDS
   throttleBL = limitThrottle(throttle + pitchPID + rollPID + OFFSET_BL);

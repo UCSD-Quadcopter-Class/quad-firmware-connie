@@ -81,7 +81,9 @@ void loop()
   info.footer = calculateChecksum(infoPointer);
   
   rfWrite(infoPointer, INFO_SIZE);
-  //lcd->print(info.throttle);
+  //lcd->clear();
+  //lcd->print(analogRead(PIN_POT1));
+  Serial.println(info.pot1);
  
   
   delay(DELAY_TIME); //TODO: Delay time needs to be adjusted
