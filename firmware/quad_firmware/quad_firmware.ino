@@ -51,10 +51,10 @@ float lastError =0;
 
 unsigned long lastTime = 0;
 
-const float OFFSET_FR = -0.5;//18;
-const float OFFSET_BL = -0.5;//18;
+const float OFFSET_FR = -28.0;//18;
+const float OFFSET_BL = 3;//18;
 const float OFFSET_BR = 0;//28;
-const float OFFSET_FL = -2.5  ;//12;
+const float OFFSET_FL = -20  ;//12;
 
 float throttleFR = 0;
 float throttleBL = 0;
@@ -65,7 +65,6 @@ float rollPID = 0;
 
 float filteredPitch = 0;
 float pitchReadingAverage = 0;
-//float lastPitchReading = 0;
 float rollReadingAverage = 0;
 float gyroReadingAverage = 0;
 
@@ -242,9 +241,10 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
 
 float limitThrottle(float throttleValue)
 {
-  if (throttleValue < 0.0) return 0;
+  return constrain((int)throttleValue, 0, 255);
+  /*if (throttleValue < 0.0) return 0;
   else if (throttleValue > 255.0) return 255;
-  else return throttleValue;
+  else return throttleValue;*/
 }
 
 void calculateReadingAverages()
@@ -342,8 +342,7 @@ void loop()
       
       float pitch = info.pitch;
       float roll = info.roll;
-      float throttle = info.throttle;
-      if(throttle > 1024.0 || throttle < 0) throttle = 0.0;
+      float throttle = constrain(info.throttle, 0.0, 1024.0);
 
       throttle = throttle/THROTTLE_MAX * THROTTLE_COEFFICIENT;
       
