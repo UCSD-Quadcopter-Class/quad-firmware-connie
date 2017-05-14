@@ -1,2 +1,5 @@
--Use sliding/moving window to get avreage of last 10 IMU readings. This helps smooth the IMU readings a lot. Without this, the readings are all over the place.
+-Use sliding/moving window to get average of last x IMU readings. This helps smooth the IMU readings a lot. Without this, the readings are all over the place.
+ The higher the x, the better the IMU readings, but the slower the PID control responds to changes. Set to 2 right now.
 -Use low/hi pass filter for IMU.
+
+-Use a complementary filter on IMU acc/gyro data to get pitch angle.

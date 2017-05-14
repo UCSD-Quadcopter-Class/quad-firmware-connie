@@ -41,12 +41,12 @@ const float PITCH_MID = 612;
 const float PITCH_MIN = 0;
 const float PITCH_OFFSET = (pitchMax - pitchMin) / 2.0 - PITCH_MID / ((PITCH_MAX - PITCH_MIN) / (pitchMax - pitchMin));
 
-const float KP = 1.8;
-const float KI = 0;//0.0001;//0.0001;//0.01;
-const float KD = 0.001;//0.0000001;//0.001;//0.001;
+const float KP = 0.5;
+const float KI = 0.00001;
+const float KD = 150;
 float error = 0;
 float errorSum = 0;
-float lastError =0;
+float lastError = 0;
 
 
 unsigned long lastTime = 0;
@@ -86,8 +86,8 @@ unsigned int button2Value = 1; //on/off
 
 const float POT1_MIN = 115;
 const float POT1_MAX = 816;
-const float POT1_LIMIT_MIN = 0.0;
-const float POT1_LIMIT_MAX = 1.0;
+const float POT1_LIMIT_MIN = 0.2;
+const float POT1_LIMIT_MAX = 1.8;
 const float POT1_COEFFICIENT = (POT1_LIMIT_MAX - POT1_LIMIT_MIN)/(POT1_MAX - POT1_MIN);
 const float POT1_CONSTANT = POT1_LIMIT_MAX - POT1_MAX * POT1_COEFFICIENT;
 
@@ -95,7 +95,7 @@ const float POT1_CONSTANT = POT1_LIMIT_MAX - POT1_MAX * POT1_COEFFICIENT;
 const float POT2_MIN = 0;
 const float POT2_MAX = 1003;
 const float POT2_LIMIT_MIN = 0.0;
-const float POT2_LIMIT_MAX = 1.0;
+const float POT2_LIMIT_MAX = 200.0;
 const float POT2_COEFFICIENT = (POT2_LIMIT_MAX - POT2_LIMIT_MIN)/(POT2_MAX - POT2_MIN);
 const float POT2_CONSTANT = POT2_LIMIT_MAX - POT2_MAX * POT2_COEFFICIENT;
 
@@ -203,7 +203,7 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
 //Serial.println(compCoefficient);
   if (pidCalculationStarted)
   {
-    filteredPitch = compCoefficient * (filteredPitch - gyroReadingAverage * timeChange/1000.0) + (1.0 - compCoefficient) * pitchReadingAverage; //TODO: check comp filter logic/equation, gyroReading?
+    filteredPitch = compCoefficient * (filteredPitch - gyroReadingAverage * timeChange/1000.0) + (1.0 - compCoefficient) * pitchReadingAverage; 
   }
   else
   {
@@ -215,11 +215,16 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
   //Serial.println(pitchReadingAverage); Serial.print(" ");
   //Serial.println(pot1Value);
   error = normalizePitch(pitch) - filteredPitch;
+  errorSum *= 0.5;
   errorSum += error * timeChange;
+
+  errorSum = constrain(errorSum, -1000.0, 1000.0);
   float dError = (error -  lastError) / timeChange;
   
-  pitchPID = pot1Value * error + KI * errorSum + pot2Value * dError;
-  //Serial.print(pitchReadingAverage); Serial.print(" "); Serial.println(filteredPitch); //Serial.print(" "); Serial.println(pitchPID);
+  
+  pitchPID = KP * error + KI * errorSum + KD * dError;
+  //Serial.print(pot1Value, 5); Serial.print(" "); Serial.println(pot2Value);
+  //Serial.print(errorSum); Serial.print(" "); Serial.print(pot1Value*errorSum); Serial.print(" "); Serial.println(pot2Value*dError);
   //if (pitchPID < -255 || pitchPID >255) Serial.println(pitchPID);  
   //if(lastError < -1000 || lastError > 1000) Serial.println(lastError);
   //if(dError < -100 || dError > 100.0) Serial.print(dError); Serial.print(" "); Serial.print(error); Serial.print(" "); Serial.print(lastError); Serial.print(" "); Serial.println(timeChange);
@@ -310,9 +315,12 @@ void calculateReadingAverages()
 
 void loop()
 {  
+  //Serial.println(pot1Value);
   calculateReadingAverages();
   if (reset)
   {
+    errorSum = 0;
+    lastError = 0;
     pidCalculationStarted = false;
     reset = false;  
   }
