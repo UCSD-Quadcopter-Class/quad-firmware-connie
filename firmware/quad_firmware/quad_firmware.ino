@@ -73,7 +73,6 @@ float gyroReadings [WINDOW_SIZE];
 
 float pitchOffset = 0;
 float rollOffset = 0;
-float gyroOffset = 0;
 
 float pot1Value = 0;
 float pot2Value=0;
@@ -114,7 +113,7 @@ void setup()
 
   setupWindow();
   setupSensor();
-  //calibrateSensor();
+  calibrateSensor();
   
   lastTime = millis();
 }
@@ -176,11 +175,6 @@ void calibrateSensor()
 
   pitchOffset = pitchValue / 5.0;
   rollOffset = rollValue / 5.0;
-  gyroOffset = gyroValue / 5.0;
-
-  //Serial.println(pitchOffset);
-  //Serial.println(rollOffset);
-  //Serial.println(gyroOffset);
 }
 
 float normalizePitch(float pitchValue)
@@ -296,16 +290,22 @@ void calculateReadingAverages()
   rollReadingAverage -= rollOffset;
 }
 
+void resetAndRecalibrate()
+{
+  errorSum = 0;
+  lastError = 0;
+  calibrateSensor();
+  pidCalculationStarted = false;
+  reset = false;  
+}
+
 void loop()
 {  
   calculateReadingAverages();
   
   if (reset)
   {
-    errorSum = 0;
-    lastError = 0;
-    pidCalculationStarted = false;
-    reset = false;  
+    resetAndRecalibrate();
   }
 
 
