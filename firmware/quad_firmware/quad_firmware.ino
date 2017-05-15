@@ -38,8 +38,8 @@ const float PITCH_MIN = 0;
 const float PITCH_OFFSET = (pitchMax - pitchMin) / 2.0 - PITCH_MID / ((PITCH_MAX - PITCH_MIN) / (pitchMax - pitchMin));
 
 const float KP = 0.5;
-const float KI = 0.00001;
-const float KD = 150;
+const float KI = 0.3;
+const float KD = 0.18;
 float error = 0;
 float errorSum = 0;
 float lastError = 0;
@@ -47,15 +47,20 @@ float lastError = 0;
 
 unsigned long lastTime = 0;
 
-const float OFFSET_FR = -28.0;//18;
-const float OFFSET_BL = 3;//18;
-const float OFFSET_BR = 0;//28;
-const float OFFSET_FL = -20  ;//12;
+const float OFFSET_FR = 0;//-28.0;//18;
+const float OFFSET_BL = 0;//3;//18;
+const float OFFSET_BR = 0;//0;//28;
+const float OFFSET_FL = 0;//-20  ;//12;
 
-float throttleFR = 0;
-float throttleBL = 0;
-float throttleFL = 0;
-float throttleBR = 0;
+const float PROPORTIONAL_FR = 1;
+const float PROPORTIONAL_BL = 1;
+const float PROPORTIONAL_BR = 1;
+const float PROPORTIONAL_FL = 1;
+
+unsigned int throttleFR = 0;
+unsigned int throttleBL = 0;
+unsigned int throttleFL = 0;
+unsigned int throttleBR = 0;
 float pitchPID = 0;
 float rollPID = 0;
 
@@ -82,15 +87,15 @@ unsigned int button2Value = 1; //on/off
 const float POT1_MIN = 115;
 const float POT1_MAX = 816;
 const float POT1_LIMIT_MIN = 0.2;
-const float POT1_LIMIT_MAX = 1.8;
+const float POT1_LIMIT_MAX = 1.2;
 const float POT1_COEFFICIENT = (POT1_LIMIT_MAX - POT1_LIMIT_MIN)/(POT1_MAX - POT1_MIN);
 const float POT1_CONSTANT = POT1_LIMIT_MAX - POT1_MAX * POT1_COEFFICIENT;
 
 
 const float POT2_MIN = 0;
 const float POT2_MAX = 1003;
-const float POT2_LIMIT_MIN = 0.0;
-const float POT2_LIMIT_MAX = 200.0;
+const float POT2_LIMIT_MIN = -0.5;
+const float POT2_LIMIT_MAX = 3;
 const float POT2_COEFFICIENT = (POT2_LIMIT_MAX - POT2_LIMIT_MIN)/(POT2_MAX - POT2_MIN);
 const float POT2_CONSTANT = POT2_LIMIT_MAX - POT2_MAX * POT2_COEFFICIENT;
 
@@ -149,32 +154,30 @@ void calibrateSensor()
   sensors_vec_t   orientation;
   float pitchValue = 0;
   float rollValue = 0;
-  float gyroValue = 0;
-
   float pitchSum = 0;
   float rollSum = 0;
-  float gyroSum = 0;
 
-  for(int i = 0; i < 5; i++)
+  for(int i = 0; i < 10; i++)
   {
+    pitchSum = 0;
+    rollSum = 0;
+    
     for(int j = 0; j < 10; j++)
     {
-      // Use the simple AHRS function to get the current orientation.
       if (ahrs.getOrientation(&orientation))
       {
         pitchSum += orientation.pitch;
         rollSum += orientation.roll;
-        gyroSum += orientation.gyro_y;
       }
     }
 
     pitchValue += pitchSum / 10.0;
     rollValue += rollSum / 10.0;
-    gyroValue += gyroSum / 10.0;
   }
 
-  pitchOffset = pitchValue / 5.0;
-  rollOffset = rollValue / 5.0;
+  pitchOffset = pitchValue / 10.0;
+  rollOffset = rollValue / 10.0;
+  Serial.println("Calibration complete.");
 }
 
 float normalizePitch(float pitchValue)
@@ -186,13 +189,12 @@ float normalizePitch(float pitchValue)
 
 void calculatePID(float pitch, float roll, float throttle, float yaw)
 {
-  if (lastError < -200 || lastError > 200) lastError=0;
-  float timeChange = (float)abs((millis() - lastTime));
-  compCoefficient = COMP_COEFFICIENT;//pot1Value; //Serial.println(compCoefficient);
-//Serial.println(compCoefficient);
+  if (lastError < -200 || lastError > 200) lastError = 0;
+  float timeChange = ((float)abs((millis() - lastTime)))/1000.0;
+
   if (pidCalculationStarted)
   {
-    filteredPitch = compCoefficient * (filteredPitch - gyroReadingAverage * timeChange/1000.0) + (1.0 - compCoefficient) * pitchReadingAverage; 
+    filteredPitch = constrain(COMP_COEFFICIENT * (filteredPitch - gyroReadingAverage * timeChange) + (1.0 - COMP_COEFFICIENT) * pitchReadingAverage, -180.0, 180.0); 
   }
   else
   {
@@ -200,40 +202,25 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
     pidCalculationStarted = true;
   }
 
-  
-  //Serial.println(pitchReadingAverage); Serial.print(" ");
-  //Serial.println(pot1Value);
   error = normalizePitch(pitch) - filteredPitch;
-  errorSum *= 0.5;
+  errorSum *= 0.9999; //decay errorSum
   errorSum += error * timeChange;
-
-  errorSum = constrain(errorSum, -1000.0, 1000.0);
+  errorSum = constrain(errorSum, -200.0, 200.0); //bound errorSum
+  
   float dError = (error -  lastError) / timeChange;
   
-  
+  //Serial.print(error); Serial.print(" "); Serial.print(errorSum); Serial.print(" "); Serial.println(pot2Value);
   pitchPID = KP * error + KI * errorSum + KD * dError;
-  //Serial.print(pot1Value, 5); Serial.print(" "); Serial.println(pot2Value);
-  //Serial.print(errorSum); Serial.print(" "); Serial.print(pot1Value*errorSum); Serial.print(" "); Serial.println(pot2Value*dError);
-  //if (pitchPID < -255 || pitchPID >255) Serial.println(pitchPID);  
-  //if(lastError < -1000 || lastError > 1000) Serial.println(lastError);
-  //if(dError < -100 || dError > 100.0) Serial.print(dError); Serial.print(" "); Serial.print(error); Serial.print(" "); Serial.print(lastError); Serial.print(" "); Serial.println(timeChange);
   lastError = error;
   lastTime = millis();
 
-  //TODO: CHECK BACKWARDS
-  throttleBL = limitThrottle(throttle + pitchPID + rollPID + OFFSET_BL);
-  throttleBR = limitThrottle(throttle + pitchPID - rollPID + OFFSET_BR);
-  throttleFL = limitThrottle(throttle - pitchPID + rollPID + OFFSET_FL);
-  throttleFR = limitThrottle(throttle - pitchPID - rollPID + OFFSET_FR);
-  //if (pitchReadingAverage < pitchMin) pitchMin = pitchReadingAverage; //debugging
-  //if (pitchReadingAverage > pitchMax) pitchMax = pitchReadingAverage; //debugging
-  //Serial.print(pitchPID); Serial.print(" "); Serial.print(normalizePitch(pitch)); Serial.print(" "); Serial.println(pitchReadingAverage); 
-  //Serial.print(pitchPID); Serial.print(" "); Serial.println(error);
-  //Serial.print(pitchMin); Serial.print(" "); Serial.println(pitchMax);
-  //Serial.println(gyroReadingAverage);
+  throttleBL = limitThrottle((throttle + pitchPID + rollPID) * PROPORTIONAL_BL + OFFSET_BL);
+  throttleBR = limitThrottle((throttle + pitchPID - rollPID) * PROPORTIONAL_BR + OFFSET_BR);
+  throttleFL = limitThrottle((throttle - pitchPID + rollPID) * PROPORTIONAL_FL + OFFSET_FL);
+  throttleFR = limitThrottle((throttle - pitchPID - rollPID) * PROPORTIONAL_FR + OFFSET_FR);
 }
 
-float limitThrottle(float throttleValue)
+int limitThrottle(float throttleValue)
 {
   return constrain((int)throttleValue, 0, 255);
 }
@@ -258,7 +245,6 @@ void calculateReadingAverages()
       }
     }
   }
-  
 
   if (ahrs.getOrientation(&orientation))
   {
@@ -268,7 +254,6 @@ void calculateReadingAverages()
     pitchReadingAverage = 0;
     rollReadingAverage = 0;
     gyroReadingAverage = 0;
-    
 
     for(int i = 0; i < WINDOW_SIZE; i++)
     {
@@ -284,7 +269,6 @@ void calculateReadingAverages()
     if (windowCounter == WINDOW_SIZE) windowCounter = 0;
     else windowCounter++;  
   }
-
   
   pitchReadingAverage -= pitchOffset;
   rollReadingAverage -= rollOffset;
@@ -295,6 +279,7 @@ void resetAndRecalibrate()
   errorSum = 0;
   lastError = 0;
   calibrateSensor();
+  filteredPitch = pitchReadingAverage;
   pidCalculationStarted = false;
   reset = false;  
 }
@@ -322,13 +307,13 @@ void loop()
       {
         Serial.println("Bad Header!");
         return;
-      } //else Serial.println("Good");
+      }
 
       if(calculateChecksum(infoBuffer) != info.footer)
       {
         Serial.println("Bad checksum!");
         return;
-      } //else Serial.println("Good");
+      }
       
       float pitch = info.pitch;
       float roll = info.roll;
@@ -344,8 +329,6 @@ void loop()
       pot2Value = float(info.pot2) * POT2_COEFFICIENT + POT2_CONSTANT;
       if (pot2Value < POT2_LIMIT_MIN) pot2Value = POT2_LIMIT_MIN;
       else if(pot2Value > POT2_LIMIT_MAX) pot2Value = POT2_LIMIT_MAX;
-      //Serial.print(pot1Value); Serial.print(" "); Serial.println(pot2Value);
-
 
       if(info.button1 == 0) reset = true;
       if(info.button2 == 0)
@@ -353,8 +336,6 @@ void loop()
         motorsOn = !motorsOn;
       }
       
-            
-      //Serial.println(pot1Value);
       calculatePID(pitch, roll, throttle, yaw);
 
       if (motorsOn)
