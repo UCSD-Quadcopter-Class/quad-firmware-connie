@@ -12,7 +12,7 @@
 #define LSM9DS1_MCS 5
 
 bool reset = true;
-bool motorsOn = true;
+bool motorsOn = false;
 bool pidCalculationStarted = false;
 
 float pitchMax = 45; //approx
