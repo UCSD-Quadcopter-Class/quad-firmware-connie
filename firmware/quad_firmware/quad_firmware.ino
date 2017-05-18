@@ -38,14 +38,15 @@ const float PITCH_MIN = 0;
 const float PITCH_OFFSET = (pitchMax - pitchMin) / 2.0 - PITCH_MID / ((PITCH_MAX - PITCH_MIN) / (pitchMax - pitchMin));
 
 const float KP = 0.5;
-const float KI = 0.3;
+const float KI = 2;
 const float KD = 0.18;
 float error = 0;
 float errorSum = 0;
 float lastError = 0;
 
-
+const unsigned long TIMEOUT = 5 * 1000;
 unsigned long lastTime = 0;
+unsigned long lastValidPacketTime = 0;
 
 const float OFFSET_FR = 0;//-28.0;//18;
 const float OFFSET_BL = 0;//3;//18;
@@ -69,12 +70,16 @@ float pitchReadingAverage = 0;
 float rollReadingAverage = 0;
 float gyroReadingAverage = 0;
 
-const int WINDOW_SIZE = 2;
+const int WINDOW_SIZE = 1;
 int windowCounter = 0;
 float pitchReadings [WINDOW_SIZE];
 float rollReadings [WINDOW_SIZE];
 float gyroReadings [WINDOW_SIZE];
 
+float pitch = 0;
+float throttle = 0;
+float roll = 0;
+float yaw = 0;
 
 float pitchOffset = 0;
 float rollOffset = 0;
@@ -94,8 +99,8 @@ const float POT1_CONSTANT = POT1_LIMIT_MAX - POT1_MAX * POT1_COEFFICIENT;
 
 const float POT2_MIN = 0;
 const float POT2_MAX = 1003;
-const float POT2_LIMIT_MIN = -0.5;
-const float POT2_LIMIT_MAX = 3;
+const float POT2_LIMIT_MIN = -0.2;
+const float POT2_LIMIT_MAX = 3.2;
 const float POT2_COEFFICIENT = (POT2_LIMIT_MAX - POT2_LIMIT_MIN)/(POT2_MAX - POT2_MIN);
 const float POT2_CONSTANT = POT2_LIMIT_MAX - POT2_MAX * POT2_COEFFICIENT;
 
@@ -203,13 +208,16 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
   }
 
   error = normalizePitch(pitch) - filteredPitch;
-  errorSum *= 0.9999; //decay errorSum
-  errorSum += error * timeChange;
-  errorSum = constrain(errorSum, -200.0, 200.0); //bound errorSum
   
   float dError = (error -  lastError) / timeChange;
+  if ((abs(errorSum) > 10)&& (abs(errorSum + dError) < abs(dError)) && (abs(dError) > 150.0)) {errorSum *= 0.2; /*Serial.println("--------------------------------------------");*/}
+  else if (abs(errorSum + error) < abs(errorSum)) errorSum *= 0.996;
+  else errorSum *= 0.999; //decay errorSum
+  errorSum += error * timeChange;
+  errorSum = constrain(errorSum, -150.0, 150.0); //bound errorSum
   
-  //Serial.print(error); Serial.print(" "); Serial.print(errorSum); Serial.print(" "); Serial.println(pot2Value);
+  
+  //Serial.print(dError); Serial.print(" "); Serial.println(errorSum);
   pitchPID = KP * error + KI * errorSum + KD * dError;
   lastError = error;
   lastTime = millis();
@@ -293,65 +301,76 @@ void loop()
     resetAndRecalibrate();
   }
 
-
   if (rfAvailable())
   {
     int numBytesAvailable = rfAvailable(); //behaves weirdly if you use rfAvailable return value directly
     
     if (numBytesAvailable >= INFO_SIZE)
     {
+      bool validPacket = true;
       rfRead(infoBuffer, INFO_SIZE);
       flightControlInfo info = *((flightControlInfo *) infoBuffer);
      
       if(info.header != HEADER)
       {
         Serial.println("Bad Header!");
-        return;
+        validPacket = false;
       }
 
-      if(calculateChecksum(infoBuffer) != info.footer)
+      if(validPacket && (calculateChecksum(infoBuffer) != info.footer))
       {
         Serial.println("Bad checksum!");
-        return;
+        validPacket = false;
       }
-      
-      float pitch = info.pitch;
-      float roll = info.roll;
-      float throttle = constrain(info.throttle, 0.0, 1024.0);
 
-      throttle = throttle/THROTTLE_MAX * THROTTLE_COEFFICIENT;
-      
-      float yaw = info.yaw;
-      pot1Value = float(info.pot1) * POT1_COEFFICIENT + POT1_CONSTANT;
-      if (pot1Value < POT1_LIMIT_MIN) pot1Value = POT1_LIMIT_MIN;
-      else if(pot1Value > POT1_LIMIT_MAX) pot1Value = POT1_LIMIT_MAX;
-     
-      pot2Value = float(info.pot2) * POT2_COEFFICIENT + POT2_CONSTANT;
-      if (pot2Value < POT2_LIMIT_MIN) pot2Value = POT2_LIMIT_MIN;
-      else if(pot2Value > POT2_LIMIT_MAX) pot2Value = POT2_LIMIT_MAX;
-
-      if(info.button1 == 0) reset = true;
-      if(info.button2 == 0)
-      {
-        motorsOn = !motorsOn;
-      }
-      
-      calculatePID(pitch, roll, throttle, yaw);
-
-      if (motorsOn)
-      {
-        analogWrite(MOTOR_FR, throttleFR); //red
-        analogWrite(MOTOR_BL, throttleBL); //white
-        analogWrite(MOTOR_BR, throttleBR); //black
-        analogWrite(MOTOR_FL, throttleFL); //green
-      }
-      else
-      {
-        analogWrite(MOTOR_FR, 0); //red
-        analogWrite(MOTOR_BL, 0); //white
-        analogWrite(MOTOR_BR, 0); //black
-        analogWrite(MOTOR_FL, 0); //green
+      if(validPacket)
+      {      
+        pitch = info.pitch;
+        roll = info.roll;
+        throttle = constrain(info.throttle, 0.0, 1024.0);
+  
+        throttle = throttle/THROTTLE_MAX * THROTTLE_COEFFICIENT;
+        
+        yaw = info.yaw;
+        pot1Value = float(info.pot1) * POT1_COEFFICIENT + POT1_CONSTANT;
+        if (pot1Value < POT1_LIMIT_MIN) pot1Value = POT1_LIMIT_MIN;
+        else if(pot1Value > POT1_LIMIT_MAX) pot1Value = POT1_LIMIT_MAX;
+       
+        pot2Value = float(info.pot2) * POT2_COEFFICIENT + POT2_CONSTANT;
+        if (pot2Value < POT2_LIMIT_MIN) pot2Value = POT2_LIMIT_MIN;
+        else if(pot2Value > POT2_LIMIT_MAX) pot2Value = POT2_LIMIT_MAX;
+  
+        if(info.button1 == 0) reset = true;
+        if(info.button2 == 0)
+        {
+          motorsOn = !motorsOn;
+        }
+        
+        lastValidPacketTime = millis();
       }
     }
+  }
+
+  long timeSinceLastValidPacket = millis() - lastValidPacketTime;
+  if(timeSinceLastValidPacket > TIMEOUT)
+  {
+    motorsOn = false;
+  }
+  
+  calculatePID(pitch, roll, throttle, yaw);
+
+  if (motorsOn)
+  {
+    analogWrite(MOTOR_FR, throttleFR); //red
+    analogWrite(MOTOR_BL, throttleBL); //white
+    analogWrite(MOTOR_BR, throttleBR); //black
+    analogWrite(MOTOR_FL, throttleFL); //green
+  }
+  else
+  {
+    analogWrite(MOTOR_FR, 0); //red
+    analogWrite(MOTOR_BL, 0); //white
+    analogWrite(MOTOR_BR, 0); //black
+    analogWrite(MOTOR_FL, 0); //green
   }
 }
