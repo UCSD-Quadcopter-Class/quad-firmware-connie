@@ -83,7 +83,15 @@ void loop()
   rfWrite(infoPointer, INFO_SIZE);
   //lcd->clear();
   //lcd->print(analogRead(PIN_POT1));
-  Serial.println(info.pot1);
+    lcd->clear();
+    String str = "";
+    str += info.pot1;
+    str += " ";
+    str += info.pot2;
+    char charBuf [50];
+    str.toCharArray(charBuf, 50);
+  lcd->print(charBuf);
+  //Serial.println(info.pot1);
  
   
   delay(DELAY_TIME); //TODO: Delay time needs to be adjusted

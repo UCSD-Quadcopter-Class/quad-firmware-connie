@@ -15,8 +15,17 @@ bool reset = true;
 bool motorsOn = false;
 bool pidCalculationStarted = false;
 
-float pitchMax = 45; //approx
-float pitchMin = -45; //approx
+float pitchMax = 90; //approx
+float pitchMin = -90; //approx
+
+float rollMax = 90; //approx
+float rollMin = -90; //approx
+
+float yawMax = 360;
+float yawMin = 0;
+float yawMid = yawMax/2.0;
+
+
 
 
 unsigned char infoBuffer [INFO_SIZE]; 
@@ -31,29 +40,53 @@ const float THROTTLE_MAX = 1024;
 const float THROTTLE_COEFFICIENT = 255;
 
 const float YAW_MAX = 1315;
+const float YAW_MIN = 0;
+const float YAW_MID = 612; //(YAW_MAX - YAW_MIN) / 2.0;
 const float ROLL_MAX = 1136;
-const float PITCH_MAX = 1224; //1390 actual max
-const float PITCH_MID = 612;
-const float PITCH_MIN = 0;
-const float PITCH_OFFSET = (pitchMax - pitchMin) / 2.0 - PITCH_MID / ((PITCH_MAX - PITCH_MIN) / (pitchMax - pitchMin));
+const float ROLL_MIN = 10;
+const float ROLL_MID = 627.09; //(ROLL_MAX - ROLL_MIN) / 2.0;
 
-const float KP = 0.5;
-const float KI = 2;
-const float KD = 0.18;
+const float PITCH_MAX = 1224; //1390 actual max
+const float PITCH_MIN = 0;
+const float PITCH_MID = (PITCH_MAX - PITCH_MIN) / 2.0;
+
+const float PITCH_OFFSET = (pitchMax - pitchMin) / 2.0 - PITCH_MID / ((PITCH_MAX - PITCH_MIN) / (pitchMax - pitchMin)) - 0.15;
+const float ROLL_OFFSET = (rollMax - rollMin) / 2.0 - ROLL_MID / ((ROLL_MAX - ROLL_MIN) / (rollMax - rollMin)) + 0.44;
+const float YAW_OFFSET = (yawMax - yawMin) / 2.0 - YAW_MID / ((YAW_MAX - YAW_MIN) / (yawMax - yawMin));
+
+const float PITCH_KP = 6.5; //0.5;
+const float PITCH_KI = 3.22;
+const float PITCH_KD = 1.15;// 0.18;
+
+const float ROLL_KP = 6.5;
+const float ROLL_KI = 3.22;
+const float ROLL_KD = 1.15;
+
+const float YAW_KP = 0;
+const float YAW_KI = 0;
+const float YAW_KD = 0;
+
+
 float error = 0;
 float errorSum = 0;
 float lastError = 0;
+float rollError = 0;
+float lastRollError = 0;
+float rollErrorSum = 0;
+float yawError = 0;
+float yawErrorSum = 0;
+float lastYawError = 0;
 
 const unsigned long TIMEOUT = 5 * 1000;
 unsigned long lastTime = 0;
 unsigned long lastValidPacketTime = 0;
 
-const float OFFSET_FR = 0;//-28.0;//18;
+const float OFFSET_FR = -5;//-28.0;//18;
 const float OFFSET_BL = 0;//3;//18;
 const float OFFSET_BR = 0;//0;//28;
 const float OFFSET_FL = 0;//-20  ;//12;
 
-const float PROPORTIONAL_FR = 1;
+const float PROPORTIONAL_FR = 0.9;
 const float PROPORTIONAL_BL = 1;
 const float PROPORTIONAL_BR = 1;
 const float PROPORTIONAL_FL = 1;
@@ -64,17 +97,26 @@ unsigned int throttleFL = 0;
 unsigned int throttleBR = 0;
 float pitchPID = 0;
 float rollPID = 0;
+float yawPID = 0;
 
 float filteredPitch = 0;
+float filteredRoll = 0;
+float filteredYaw = 0;
 float pitchReadingAverage = 0;
 float rollReadingAverage = 0;
-float gyroReadingAverage = 0;
+float gyroYReadingAverage = 0;
+float gyroXReadingAverage = 0;
+float gyroZReadingAverage = 0;
+float yawReadingAverage = 0;
 
 const int WINDOW_SIZE = 1;
 int windowCounter = 0;
 float pitchReadings [WINDOW_SIZE];
 float rollReadings [WINDOW_SIZE];
-float gyroReadings [WINDOW_SIZE];
+float gyroYReadings [WINDOW_SIZE];
+float gyroXReadings [WINDOW_SIZE];
+float gyroZReadings [WINDOW_SIZE];
+float yawReadings [WINDOW_SIZE];
 
 float pitch = 0;
 float throttle = 0;
@@ -83,6 +125,7 @@ float yaw = 0;
 
 float pitchOffset = 0;
 float rollOffset = 0;
+float yawOffset = 0;
 
 float pot1Value = 0;
 float pot2Value=0;
@@ -91,16 +134,16 @@ unsigned int button2Value = 1; //on/off
 
 const float POT1_MIN = 115;
 const float POT1_MAX = 816;
-const float POT1_LIMIT_MIN = 0.2;
-const float POT1_LIMIT_MAX = 1.2;
+const float POT1_LIMIT_MIN = 4;
+const float POT1_LIMIT_MAX = 8;
 const float POT1_COEFFICIENT = (POT1_LIMIT_MAX - POT1_LIMIT_MIN)/(POT1_MAX - POT1_MIN);
 const float POT1_CONSTANT = POT1_LIMIT_MAX - POT1_MAX * POT1_COEFFICIENT;
 
 
 const float POT2_MIN = 0;
 const float POT2_MAX = 1003;
-const float POT2_LIMIT_MIN = -0.2;
-const float POT2_LIMIT_MAX = 3.2;
+const float POT2_LIMIT_MIN = 0.2;
+const float POT2_LIMIT_MAX = 2.5;
 const float POT2_COEFFICIENT = (POT2_LIMIT_MAX - POT2_LIMIT_MIN)/(POT2_MAX - POT2_MIN);
 const float POT2_CONSTANT = POT2_LIMIT_MAX - POT2_MAX * POT2_COEFFICIENT;
 
@@ -134,7 +177,10 @@ void setupWindow()
   {
     pitchReadings[i] = 0;
     rollReadings[i] = 0;
-    gyroReadings[i] = 0;
+    gyroYReadings[i] = 0;
+    gyroXReadings[i] = 0;
+    gyroZReadings[i] = 0;
+    yawReadings[i] = 0;
   }
 }
 
@@ -192,40 +238,93 @@ float normalizePitch(float pitchValue)
   return pitchValue / (PITCH_MAX/(pitchMax - pitchMin)) - (pitchMax - pitchMin)/2.0 + PITCH_OFFSET;
 }
 
+float normalizeRoll(float rollValue)
+{
+  if (rollValue < ROLL_MIN) rollValue = ROLL_MIN;
+  else if (rollValue > ROLL_MAX) rollValue = ROLL_MAX;
+  return rollValue / (ROLL_MAX/(rollMax - rollMin)) - (rollMax - rollMin)/2.0 + ROLL_OFFSET;
+}
+
+float normalizeYaw(float yawValue)
+{
+  if(yawValue < YAW_MIN) yawValue = YAW_MIN;
+  else if (yawValue > YAW_MAX) yawValue = YAW_MAX;
+  return yawValue / (YAW_MAX/(yawMax - yawMin)) - (yawMax - yawMin)/2.0 + YAW_OFFSET;
+}
+
 void calculatePID(float pitch, float roll, float throttle, float yaw)
 {
   if (lastError < -200 || lastError > 200) lastError = 0;
+  if (lastRollError < -200 || lastRollError > 200) lastRollError = 0;
+  if(lastYawError < -200 || lastYawError > 200) lastYawError = 0;
   float timeChange = ((float)abs((millis() - lastTime)))/1000.0;
+  //Serial.print(normalizePitch(pitch)); Serial.print("\t"); Serial.print(normalizeRoll(roll)); Serial.print("\t"); Serial.println(normalizeYaw(yaw));
 
   if (pidCalculationStarted)
   {
-    filteredPitch = constrain(COMP_COEFFICIENT * (filteredPitch - gyroReadingAverage * timeChange) + (1.0 - COMP_COEFFICIENT) * pitchReadingAverage, -180.0, 180.0); 
+    //Serial.print(gyroYReadingAverage); Serial.print("\t");
+    //Serial.println(yawReadingAverage); //Serial.print("\t");
+    //Serial.println(gyroZReadingAverage);
+    filteredPitch = constrain(COMP_COEFFICIENT * (filteredPitch - gyroYReadingAverage * timeChange) + (1.0 - COMP_COEFFICIENT) * pitchReadingAverage, -180.0, 180.0); 
+    filteredRoll = constrain(COMP_COEFFICIENT * (filteredRoll - gyroXReadingAverage * timeChange) + (1.0 - COMP_COEFFICIENT) * rollReadingAverage, -180.0, 180.0); //TODO
+    filteredYaw = constrain(COMP_COEFFICIENT * (filteredYaw - gyroZReadingAverage * timeChange) + (1.0 - COMP_COEFFICIENT) * yawReadingAverage, 0, 360.0);
   }
   else
   {
     filteredPitch = pitchReadingAverage;
+    filteredRoll = rollReadingAverage;
+    filteredYaw = yawReadingAverage;
     pidCalculationStarted = true;
   }
 
   error = normalizePitch(pitch) - filteredPitch;
-  
+  rollError = normalizeRoll(roll) - filteredRoll;
+  yawError = normalizeYaw(yaw) - filteredYaw;
+
   float dError = (error -  lastError) / timeChange;
-  if ((abs(errorSum) > 10)&& (abs(errorSum + dError) < abs(dError)) && (abs(dError) > 150.0)) {errorSum *= 0.2; /*Serial.println("--------------------------------------------");*/}
-  else if (abs(errorSum + error) < abs(errorSum)) errorSum *= 0.996;
-  else errorSum *= 0.999; //decay errorSum
+  float rollDError = (rollError - lastRollError) / timeChange;
+  float yawDError = (yawError - lastYawError) / timeChange;
+  if ((abs(errorSum) > 20)&& (abs(errorSum + dError) < abs(dError)) && (abs(dError) > 450.0)) {errorSum *= 0.999998;}
+  else if (abs(errorSum + error) < abs(errorSum)) errorSum *= 0.9999999;
+  
+  errorSum *= 0.99999999; //decay errorSum
   errorSum += error * timeChange;
-  errorSum = constrain(errorSum, -150.0, 150.0); //bound errorSum
+  errorSum = constrain(errorSum, -10000.0, 10000.0); //bound errorSum
+
+  if ((abs(rollErrorSum) > 20)&& (abs(rollErrorSum + rollDError) < abs(rollDError)) && (abs(rollDError) > 450.0)) {rollErrorSum *= 0.999998;}
+  else if (abs(rollErrorSum + rollError) < abs(rollErrorSum)) rollErrorSum *= 0.9999999;
+  else rollErrorSum *= 0.99999999; //decay errorSum
+  rollErrorSum += rollError * timeChange;
+  rollErrorSum = constrain(rollErrorSum, -10000.0, 10000.0); //bound errorSum
+
+  if ((abs(yawErrorSum) > 10)&& (abs(yawErrorSum + yawDError) < abs(yawDError)) && (abs(yawDError) > 150.0)) {yawErrorSum *= 0.2;}
+  else if (abs(yawErrorSum + yawError) < abs(yawErrorSum)) yawErrorSum *= 0.996;
+  else yawErrorSum *= 0.999; //decay errorSum
+  yawErrorSum += yawError * timeChange;
+  yawErrorSum = constrain(yawErrorSum, -150.0, 150.0); //bound errorSum
   
   
-  //Serial.print(dError); Serial.print(" "); Serial.println(errorSum);
-  pitchPID = KP * error + KI * errorSum + KD * dError;
+ //float tempPITCH_KP = pot1Value;//PITCH_KP;
+ //float tempPITCH_KD = pot2Value;
+ //float tempPITCH_KI = pot1Value;
+
+  //float tempROLL_KP = pot1Value;//PITCH_KP;
+  //float tempROLL_KD = pot2Value;
+  //float tempROLL_KI = pot1Value;
+
+  pitchPID = PITCH_KP * error + PITCH_KI * errorSum + PITCH_KD * dError;
+  rollPID = ROLL_KP * rollError + ROLL_KI * rollErrorSum + ROLL_KD * rollDError;
+  yawPID = YAW_KP * yawError + YAW_KI * yawErrorSum + YAW_KD * yawError;
+   //Serial.print(error); Serial.print("\t"); Serial.print(PITCH_KP*error); Serial.print("\t"); Serial.print(PITCH_KD*dError); Serial.print("\t"); Serial.println(pitchPID);
   lastError = error;
+  lastRollError = rollError;
+  lastYawError = yawError;
   lastTime = millis();
 
-  throttleBL = limitThrottle((throttle + pitchPID + rollPID) * PROPORTIONAL_BL + OFFSET_BL);
-  throttleBR = limitThrottle((throttle + pitchPID - rollPID) * PROPORTIONAL_BR + OFFSET_BR);
-  throttleFL = limitThrottle((throttle - pitchPID + rollPID) * PROPORTIONAL_FL + OFFSET_FL);
-  throttleFR = limitThrottle((throttle - pitchPID - rollPID) * PROPORTIONAL_FR + OFFSET_FR);
+  throttleBL = limitThrottle((throttle - pitchPID /*+ rollPID*/) * PROPORTIONAL_BL + OFFSET_BL);   //BACK
+  throttleBR = limitThrottle((throttle /*- pitchPID*/ - rollPID) * PROPORTIONAL_BR + OFFSET_BR);
+  throttleFL = limitThrottle((throttle /*+ pitchPID*/ + rollPID) * PROPORTIONAL_FL + OFFSET_FL);
+  throttleFR = limitThrottle((throttle + pitchPID /*- rollPID*/) * PROPORTIONAL_FR + OFFSET_FR);  //FRONT
 }
 
 int limitThrottle(float throttleValue)
@@ -247,7 +346,10 @@ void calculateReadingAverages()
       {
         pitchReadings[windowCounter] = orientation.pitch;
         rollReadings[windowCounter] = orientation.roll;
-        gyroReadings[windowCounter] = orientation.gyro_y;  
+        gyroYReadings[windowCounter] = orientation.gyro_y;  
+        gyroXReadings[windowCounter] = orientation.gyro_x; 
+        gyroZReadings[windowCounter] = orientation.gyro_z; 
+        yawReadings[windowCounter] = orientation.heading;
         if (windowCounter == 10) windowCounter = 0;
         else windowCounter++;  
       }
@@ -258,21 +360,33 @@ void calculateReadingAverages()
   {
     pitchReadings[windowCounter] = orientation.pitch;
     rollReadings[windowCounter] = orientation.roll;
-    gyroReadings[windowCounter] = orientation.gyro_y;
+    gyroYReadings[windowCounter] = orientation.gyro_y;
+    gyroXReadings[windowCounter] = orientation.gyro_x;
+    gyroZReadings[windowCounter] = orientation.gyro_z;
+    yawReadings[windowCounter] = orientation.heading;
     pitchReadingAverage = 0;
     rollReadingAverage = 0;
-    gyroReadingAverage = 0;
+    gyroYReadingAverage = 0;
+    gyroXReadingAverage = 0;
+    gyroZReadingAverage = 0;
+    yawReadingAverage = 0;
 
     for(int i = 0; i < WINDOW_SIZE; i++)
     {
       pitchReadingAverage += pitchReadings[i];
       rollReadingAverage += rollReadings[i];
-      gyroReadingAverage += gyroReadings[i];
+      gyroYReadingAverage += gyroYReadings[i];
+      gyroXReadingAverage += gyroXReadings[i];
+      gyroZReadingAverage += gyroZReadings[i];
+      yawReadingAverage += yawReadings[i];
     }
 
     pitchReadingAverage /= float(WINDOW_SIZE);
     rollReadingAverage /= float(WINDOW_SIZE);
-    gyroReadingAverage /= float(WINDOW_SIZE);
+    gyroYReadingAverage /= float(WINDOW_SIZE);
+    gyroXReadingAverage /= float(WINDOW_SIZE);
+    gyroZReadingAverage /= float(WINDOW_SIZE);
+    yawReadingAverage /= float(WINDOW_SIZE);
 
     if (windowCounter == WINDOW_SIZE) windowCounter = 0;
     else windowCounter++;  
@@ -280,14 +394,21 @@ void calculateReadingAverages()
   
   pitchReadingAverage -= pitchOffset;
   rollReadingAverage -= rollOffset;
+  yawReadingAverage -= yawOffset;
 }
 
 void resetAndRecalibrate()
 {
   errorSum = 0;
+  rollErrorSum = 0;
+  yawErrorSum = 0;
   lastError = 0;
+  lastRollError = 0;
+  lastYawError = 0;
   calibrateSensor();
   filteredPitch = pitchReadingAverage;
+  filteredRoll = rollReadingAverage;
+  filteredYaw = yawReadingAverage;
   pidCalculationStarted = false;
   reset = false;  
 }
@@ -332,7 +453,9 @@ void loop()
         throttle = throttle/THROTTLE_MAX * THROTTLE_COEFFICIENT;
         
         yaw = info.yaw;
+        //Serial.print(info.pitch); Serial.print("\t"); Serial.print(info.roll); Serial.print("\t"); Serial.println(info.yaw);
         pot1Value = float(info.pot1) * POT1_COEFFICIENT + POT1_CONSTANT;
+        //Serial.print(pot1Value); Serial.print(" "); Serial.println(pot2Value);
         if (pot1Value < POT1_LIMIT_MIN) pot1Value = POT1_LIMIT_MIN;
         else if(pot1Value > POT1_LIMIT_MAX) pot1Value = POT1_LIMIT_MAX;
        
@@ -361,10 +484,10 @@ void loop()
 
   if (motorsOn)
   {
-    analogWrite(MOTOR_FR, throttleFR); //red
-    analogWrite(MOTOR_BL, throttleBL); //white
-    analogWrite(MOTOR_BR, throttleBR); //black
-    analogWrite(MOTOR_FL, throttleFL); //green
+    analogWrite(MOTOR_FR, throttleFR); //red //FRONT
+    analogWrite(MOTOR_BL, throttleBL); //white //BACK
+    analogWrite(MOTOR_BR, throttleBR); //black //RIGHT
+    analogWrite(MOTOR_FL, throttleFL); //green  //LEFT
   }
   else
   {
