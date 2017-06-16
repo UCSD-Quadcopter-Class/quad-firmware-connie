@@ -67,9 +67,9 @@ const float YAW_KI = 0;
 const float YAW_KD = 0;
 
 
-float error = 0;
-float errorSum = 0;
-float lastError = 0;
+float pitchError = 0;
+float pitchErrorSum = 0;
+float lastPitchError = 0;
 float rollError = 0;
 float lastRollError = 0;
 float rollErrorSum = 0;
@@ -254,7 +254,7 @@ float normalizeYaw(float yawValue)
 
 void calculatePID(float pitch, float roll, float throttle, float yaw)
 {
-  if (lastError < -200 || lastError > 200) lastError = 0;
+  if (lastPitchError < -200 || lastPitchError > 200) lastPitchError = 0;
   if (lastRollError < -200 || lastRollError > 200) lastRollError = 0;
   if(lastYawError < -200 || lastYawError > 200) lastYawError = 0;
   float timeChange = ((float)abs((millis() - lastTime)))/1000.0;
@@ -277,19 +277,19 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
     pidCalculationStarted = true;
   }
 
-  error = normalizePitch(pitch) - filteredPitch;
+  pitchError = normalizePitch(pitch) - filteredPitch;
   rollError = normalizeRoll(roll) - filteredRoll;
   yawError = normalizeYaw(yaw) - filteredYaw;
 
-  float dError = (error -  lastError) / timeChange;
+  float pitchDError = (pitchError -  lastPitchError) / timeChange;
   float rollDError = (rollError - lastRollError) / timeChange;
   float yawDError = (yawError - lastYawError) / timeChange;
-  if ((abs(errorSum) > 20)&& (abs(errorSum + dError) < abs(dError)) && (abs(dError) > 450.0)) {errorSum *= 0.999998;}
-  else if (abs(errorSum + error) < abs(errorSum)) errorSum *= 0.9999999;
+  if ((abs(pitchErrorSum) > 20)&& (abs(pitchErrorSum + pitchDError) < abs(pitchDError)) && (abs(pitchDError) > 450.0)) {pitchErrorSum *= 0.999998;}
+  else if (abs(pitchErrorSum + pitchError) < abs(pitchErrorSum)) pitchErrorSum *= 0.9999999;
   
-  errorSum *= 0.99999999; //decay errorSum
-  errorSum += error * timeChange;
-  errorSum = constrain(errorSum, -10000.0, 10000.0); //bound errorSum
+  pitchErrorSum *= 0.99999999; //decay errorSum
+  pitchErrorSum += pitchError * timeChange;
+  pitchErrorSum = constrain(pitchErrorSum, -10000.0, 10000.0); //bound errorSum
 
   if ((abs(rollErrorSum) > 20)&& (abs(rollErrorSum + rollDError) < abs(rollDError)) && (abs(rollDError) > 450.0)) {rollErrorSum *= 0.999998;}
   else if (abs(rollErrorSum + rollError) < abs(rollErrorSum)) rollErrorSum *= 0.9999999;
@@ -312,11 +312,11 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
   //float tempROLL_KD = pot2Value;
   //float tempROLL_KI = pot1Value;
 
-  pitchPID = PITCH_KP * error + PITCH_KI * errorSum + PITCH_KD * dError;
+  pitchPID = PITCH_KP * pitchError + PITCH_KI * pitchErrorSum + PITCH_KD * pitchDError;
   rollPID = ROLL_KP * rollError + ROLL_KI * rollErrorSum + ROLL_KD * rollDError;
-  yawPID = YAW_KP * yawError + YAW_KI * yawErrorSum + YAW_KD * yawError;
+  yawPID = YAW_KP * yawError + YAW_KI * yawErrorSum + YAW_KD * yawDError;
    //Serial.print(error); Serial.print("\t"); Serial.print(PITCH_KP*error); Serial.print("\t"); Serial.print(PITCH_KD*dError); Serial.print("\t"); Serial.println(pitchPID);
-  lastError = error;
+  lastPitchError = pitchError;
   lastRollError = rollError;
   lastYawError = yawError;
   lastTime = millis();
@@ -324,11 +324,15 @@ void calculatePID(float pitch, float roll, float throttle, float yaw)
   throttleBL = limitThrottle((throttle - pitchPID /*+ rollPID*/) * PROPORTIONAL_BL + OFFSET_BL);   //BACK
   throttleBR = limitThrottle((throttle /*- pitchPID*/ - rollPID) * PROPORTIONAL_BR + OFFSET_BR);
   throttleFL = limitThrottle((throttle /*+ pitchPID*/ + rollPID) * PROPORTIONAL_FL + OFFSET_FL);
+ 
   throttleFR = limitThrottle((throttle + pitchPID /*- rollPID*/) * PROPORTIONAL_FR + OFFSET_FR);  //FRONT
+   //Serial.print(limitThrottle((throttle + pitchPID /*- rollPID*/))); Serial.print("\t");
+  //Serial.println(throttleFR);
 }
 
 int limitThrottle(float throttleValue)
-{
+{ 
+  if(throttleValue < 0.0) throttleValue = 0;
   return constrain((int)throttleValue, 0, 255);
 }
 
@@ -399,10 +403,10 @@ void calculateReadingAverages()
 
 void resetAndRecalibrate()
 {
-  errorSum = 0;
+  pitchErrorSum = 0;
   rollErrorSum = 0;
   yawErrorSum = 0;
-  lastError = 0;
+  lastPitchError = 0;
   lastRollError = 0;
   lastYawError = 0;
   calibrateSensor();
